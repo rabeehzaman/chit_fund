@@ -10,6 +10,9 @@ import { EditChitFundDialog } from '@/components/chit-funds/edit-chit-fund-dialo
 import { formatCurrency } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 
+// Disable caching to ensure fresh data
+export const revalidate = 0
+
 export default async function ChitFundsPage() {
   // Fetch real data from Supabase (authentication removed, RLS disabled)
   const supabase = createClient()

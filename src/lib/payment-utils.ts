@@ -66,8 +66,8 @@ export async function calculatePaymentLimits(
 
     return {
       minimum: Math.min(installmentAmount, remainingObligation),
-      maximum: remainingObligation,
-      recommended: Math.min(installmentAmount * 3, remainingObligation), // 3 months advance
+      maximum: Math.min(installmentAmount, remainingObligation), // Restrict to installment amount only
+      recommended: Math.min(installmentAmount, remainingObligation), // No advance recommendations
       totalObligation,
       totalPaid,
       remainingObligation,
@@ -113,7 +113,7 @@ export function getPaymentMessage(
   if (paymentAmount > limits.maximum) {
     return {
       type: 'error',
-      message: `Payment exceeds total remaining obligation of ₹${limits.remainingObligation.toFixed(2)}`
+      message: `Payment cannot exceed installment amount of ₹${limits.installmentAmount.toFixed(2)}`
     }
   }
 
@@ -131,24 +131,9 @@ export function getPaymentMessage(
     }
   }
 
-  if (paymentAmount > limits.installmentAmount) {
-    const breakdown = calculatePaymentBreakdown(paymentAmount, limits)
-    if (breakdown.cyclesCovered === 0) {
-      return {
-        type: 'info',
-        message: `Partial advance payment (₹${breakdown.advanceAmount.toFixed(2)} extra)`
-      }
-    } else {
-      return {
-        type: 'info',
-        message: `Paying ${breakdown.cyclesCovered + 1} cycle${breakdown.cyclesCovered > 0 ? 's' : ''} in advance`
-      }
-    }
-  }
-
   return {
-    type: 'info',
-    message: 'Partial payment - remaining balance will be due'
+    type: 'warning',
+    message: 'Partial payment - remaining balance will be due next cycle'
   }
 }
 
@@ -173,7 +158,7 @@ export function validatePaymentAmount(
   if (paymentAmount > limits.maximum) {
     return { 
       isValid: false, 
-      error: `Payment cannot exceed remaining obligation of ₹${limits.maximum.toFixed(2)}` 
+      error: `Payment cannot exceed installment amount of ₹${limits.installmentAmount.toFixed(2)}` 
     }
   }
 

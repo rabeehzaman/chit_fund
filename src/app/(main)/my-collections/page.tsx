@@ -238,7 +238,7 @@ export default function MyCollectionsPage() {
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
-              <Link href="/dashboard/collect">
+              <Link href="/collect">
                 <Button size="sm">Record New Collection</Button>
               </Link>
             </div>

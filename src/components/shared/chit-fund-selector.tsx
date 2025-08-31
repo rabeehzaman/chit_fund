@@ -19,6 +19,7 @@ interface ChitFundSelectorProps {
   placeholder?: string
   disabled?: boolean
   className?: string
+  refreshKey?: number // Add this to force refresh when needed
 }
 
 export function ChitFundSelector({
@@ -26,13 +27,15 @@ export function ChitFundSelector({
   onValueChange,
   placeholder = "Select a chit fund",
   disabled = false,
-  className = ""
+  className = "",
+  refreshKey = 0
 }: ChitFundSelectorProps) {
   const [chitFunds, setChitFunds] = useState<ChitFund[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchChitFunds = async () => {
+      setLoading(true)
       const supabase = createClient()
       const { data, error } = await supabase
         .from('chit_funds')
@@ -42,6 +45,7 @@ export function ChitFundSelector({
 
       if (error) {
         console.error('Error fetching chit funds:', error)
+        setLoading(false)
         return
       }
 
@@ -50,7 +54,7 @@ export function ChitFundSelector({
     }
 
     fetchChitFunds()
-  }, [])
+  }, [refreshKey])
 
   return (
     <Select 
