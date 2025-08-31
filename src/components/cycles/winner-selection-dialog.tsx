@@ -112,9 +112,9 @@ export function WinnerSelectionDialog({
       .filter((entry: any) => entry.status === 'closed')
       .reduce((sum: number, entry: any) => sum + parseFloat(entry.amount_collected), 0)
     
-    // For now, simple calculation: total collected minus 5% commission
-    const commission = totalCollected * 0.05
-    const payoutAmount = totalCollected - commission
+    // Winner gets the full collected amount (no commission deduction)
+    const commission = 0
+    const payoutAmount = totalCollected
     
     return {
       totalCollected,
@@ -161,7 +161,7 @@ export function WinnerSelectionDialog({
             winner_member_id: selectedWinnerId,
             total_collected: totalCollected,
             commission_amount: commission,
-            commission_percentage: 5.0,
+            commission_percentage: 0.0,
             payout_amount: payoutAmount,
             net_payout_amount: payoutAmount,
             payout_date: new Date().toISOString().split('T')[0],
@@ -180,7 +180,7 @@ export function WinnerSelectionDialog({
 
       toast({
         title: "Success",
-        description: `Winner selected successfully! Payout of ${formatCurrency(payoutAmount)} will be processed.`
+        description: `Winner selected successfully! Full payout of ${formatCurrency(payoutAmount)} will be processed.`
       })
 
       setIsOpen(false)
@@ -231,7 +231,7 @@ export function WinnerSelectionDialog({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-6">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
                     {formatCurrency(totalCollected)}
@@ -239,16 +239,10 @@ export function WinnerSelectionDialog({
                   <div className="text-sm text-muted-foreground">Total Collected</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">
-                    {formatCurrency(commission)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Commission (5%)</div>
-                </div>
-                <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
                     {formatCurrency(payoutAmount)}
                   </div>
-                  <div className="text-sm text-muted-foreground">Payout Amount</div>
+                  <div className="text-sm text-muted-foreground">Winner Payout (Full Amount)</div>
                 </div>
               </div>
             </CardContent>
