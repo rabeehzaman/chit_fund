@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { AnimatedTable, AnimatedTableBody, AnimatedTableCell, AnimatedTableHeader, AnimatedTableRow, TableHead } from '@/components/ui/animated-table'
 import { CreateChitFundDialog } from '@/components/chit-funds/create-chit-fund-dialog'
 import { ViewChitFundDialog } from '@/components/chit-funds/view-chit-fund-dialog'
 import { EditChitFundDialog } from '@/components/chit-funds/edit-chit-fund-dialog'
@@ -105,9 +105,9 @@ export default async function ChitFundsPage() {
             </CardHeader>
             <CardContent>
               {chitFunds && chitFunds.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
+                <AnimatedTable>
+                  <AnimatedTableHeader>
+                    <AnimatedTableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Total Amount</TableHead>
                       <TableHead>Installment</TableHead>
@@ -115,17 +115,17 @@ export default async function ChitFundsPage() {
                       <TableHead>Members</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                    </AnimatedTableRow>
+                  </AnimatedTableHeader>
+                  <AnimatedTableBody>
                     {chitFunds.map((fund: any) => (
-                      <TableRow key={fund.id}>
-                        <TableCell className="font-medium">{fund.name}</TableCell>
-                        <TableCell>{formatCurrency(parseFloat(fund.total_amount))}</TableCell>
-                        <TableCell>{formatCurrency(parseFloat(fund.installment_amount))}</TableCell>
-                        <TableCell>{fund.duration_months} months</TableCell>
-                        <TableCell>{fund.chit_fund_members?.length || 0}</TableCell>
-                        <TableCell>
+                      <AnimatedTableRow key={fund.id} interactive>
+                        <AnimatedTableCell className="font-medium">{fund.name}</AnimatedTableCell>
+                        <AnimatedTableCell>{formatCurrency(parseFloat(fund.total_amount))}</AnimatedTableCell>
+                        <AnimatedTableCell>{formatCurrency(parseFloat(fund.installment_amount))}</AnimatedTableCell>
+                        <AnimatedTableCell>{fund.duration_months} months</AnimatedTableCell>
+                        <AnimatedTableCell>{fund.chit_fund_members?.length || 0}</AnimatedTableCell>
+                        <AnimatedTableCell>
                           <Badge
                             variant={
                               fund.status === 'active'
@@ -139,8 +139,8 @@ export default async function ChitFundsPage() {
                           >
                             {fund.status}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
+                        </AnimatedTableCell>
+                        <AnimatedTableCell>
                           <div className="flex space-x-2">
                             <ViewChitFundDialog chitFund={fund}>
                               <Button variant="outline" size="sm">
@@ -158,11 +158,11 @@ export default async function ChitFundsPage() {
                               </Button>
                             </Link>
                           </div>
-                        </TableCell>
-                      </TableRow>
+                        </AnimatedTableCell>
+                      </AnimatedTableRow>
                     ))}
-                  </TableBody>
-                </Table>
+                  </AnimatedTableBody>
+                </AnimatedTable>
               ) : (
                 <div className="text-center py-12">
                   <div className="text-gray-500 mb-4">

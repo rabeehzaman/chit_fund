@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AnimatedStatsCard, AnimatedStatsGrid, StatsCardContent } from '@/components/ui/animated-stats-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -194,187 +195,139 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Primary KPI Cards - Enhanced */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Collection</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(kpis.monthlyCollection)}</div>
-              <div className="text-xs text-muted-foreground mb-1">
-                Target: {formatCurrency(kpis.monthlyTarget)}
-              </div>
-              <div className="flex items-center text-xs">
-                {trends.monthlyCollectionTrend >= 0 ? (
-                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                ) : (
-                  <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                )}
-                <span className={trends.monthlyCollectionTrend >= 0 ? "text-green-600" : "text-red-600"}>
-                  {Math.abs(trends.monthlyCollectionTrend).toFixed(1)}% vs last month
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Primary KPI Cards - Enhanced with Animations */}
+        <AnimatedStatsGrid>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Monthly Collection"
+              value={formatCurrency(kpis.monthlyCollection)}
+              subtitle={`Target: ${formatCurrency(kpis.monthlyTarget)}`}
+              trend={{
+                value: trends.monthlyCollectionTrend,
+                label: `${Math.abs(trends.monthlyCollectionTrend).toFixed(1)}% vs last month`,
+                positive: trends.monthlyCollectionTrend >= 0
+              }}
+              icon="DollarSign"
+              variant={kpis.collectionRate >= 80 ? 'success' : kpis.collectionRate >= 60 ? 'warning' : 'error'}
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Collection Efficiency</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpis.collectionRate.toFixed(1)}%</div>
-              <div className="text-xs text-muted-foreground mb-1">
-                {kpis.activeMembers} of {kpis.totalMembers} active
-              </div>
-              <div className="flex items-center text-xs">
-                {kpis.collectionRate >= 80 ? (
-                  <CheckCircle className="mr-1 h-3 w-3 text-green-500" />
-                ) : kpis.collectionRate >= 60 ? (
-                  <AlertTriangle className="mr-1 h-3 w-3 text-yellow-500" />
-                ) : (
-                  <AlertTriangle className="mr-1 h-3 w-3 text-red-500" />
-                )}
-                <span className={kpis.collectionRate >= 80 ? "text-green-600" : kpis.collectionRate >= 60 ? "text-yellow-600" : "text-red-600"}>
-                  {kpis.collectionRate >= 80 ? "Excellent" : kpis.collectionRate >= 60 ? "Good" : "Needs Attention"}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Collection Efficiency"
+              value={`${kpis.collectionRate.toFixed(1)}%`}
+              subtitle={`${kpis.activeMembers} of ${kpis.totalMembers} active`}
+              trend={{
+                value: 0,
+                label: kpis.collectionRate >= 80 ? "Excellent" : kpis.collectionRate >= 60 ? "Good" : "Needs Attention",
+                positive: kpis.collectionRate >= 80 ? true : kpis.collectionRate >= 60 ? undefined : false
+              }}
+              icon="Target"
+              variant={kpis.collectionRate >= 80 ? 'success' : kpis.collectionRate >= 60 ? 'warning' : 'error'}
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(kpis.totalPortfolioValue)}</div>
-              <div className="text-xs text-muted-foreground mb-1">
-                {kpis.activeFunds} active of {kpis.totalFunds} funds
-              </div>
-              <div className="flex items-center text-xs">
-                <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                <span className="text-green-600">
-                  {trends.fundGrowth.toFixed(1)}% growth
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Portfolio Value"
+              value={formatCurrency(kpis.totalPortfolioValue)}
+              subtitle={`${kpis.activeFunds} active of ${kpis.totalFunds} funds`}
+              trend={{
+                value: trends.fundGrowth,
+                label: `${trends.fundGrowth.toFixed(1)}% growth`,
+                positive: trends.fundGrowth >= 0
+              }}
+              icon="Activity"
+              variant="success"
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cycle Progress</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpis.cycleCompletionRate.toFixed(1)}%</div>
-              <div className="text-xs text-muted-foreground mb-1">
-                {kpis.completedCycles} of {kpis.totalCycles} cycles
-              </div>
-              <div className="flex items-center text-xs">
-                <CheckCircle className="mr-1 h-3 w-3 text-blue-500" />
-                <span className="text-blue-600">
-                  Avg: {kpis.averageCollectionTime.toFixed(1)} days
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Cycle Progress"
+              value={`${kpis.cycleCompletionRate.toFixed(1)}%`}
+              subtitle={`${kpis.completedCycles} of ${kpis.totalCycles} cycles`}
+              trend={{
+                value: 0,
+                label: `Avg: ${kpis.averageCollectionTime.toFixed(1)} days`,
+                positive: undefined
+              }}
+              icon="BarChart3"
+              variant="default"
+            />
+          </AnimatedStatsCard>
+        </AnimatedStatsGrid>
 
         {/* Financial & Risk Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <Card className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center">
-                <DollarSign className="mr-1 h-4 w-4 text-blue-500" />
-                Cash in Hand
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-blue-600">{formatCurrency(kpis.cashInHand)}</div>
-              <div className="text-xs text-muted-foreground">
-                Ready for payouts
-              </div>
-            </CardContent>
-          </Card>
+        <AnimatedStatsGrid className="grid-cols-1 md:grid-cols-3 lg:grid-cols-6">
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Cash in Hand"
+              value={formatCurrency(kpis.cashInHand)}
+              subtitle="Ready for payouts"
+              icon="DollarSign"
+              variant="default"
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center">
-                <AlertTriangle className="mr-1 h-4 w-4 text-orange-500" />
-                Pending Approvals
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-orange-600">{kpis.pendingApprovals}</div>
-              <div className="text-xs text-muted-foreground">
-                Closing sessions
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Pending Approvals"
+              value={kpis.pendingApprovals}
+              subtitle="Closing sessions"
+              icon="AlertTriangle"
+              variant={kpis.pendingApprovals > 5 ? 'warning' : 'default'}
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center">
-                <TrendingDown className="mr-1 h-4 w-4 text-red-500" />
-                Total Arrears
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-red-600">{formatCurrency(kpis.totalArrears)}</div>
-              <div className="text-xs text-muted-foreground">
-                {trends.arrearsChange >= 0 ? '+' : ''}{trends.arrearsChange}% this month
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Total Arrears"
+              value={formatCurrency(kpis.totalArrears)}
+              trend={{
+                value: trends.arrearsChange,
+                label: `${trends.arrearsChange >= 0 ? '+' : ''}${trends.arrearsChange}% this month`,
+                positive: trends.arrearsChange <= 0
+              }}
+              icon="TrendingDown"
+              variant="error"
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center">
-                <TrendingUp className="mr-1 h-4 w-4 text-green-500" />
-                Advance Payments
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-green-600">{formatCurrency(kpis.totalAdvances)}</div>
-              <div className="text-xs text-muted-foreground">
-                {trends.advancesChange >= 0 ? '+' : ''}{trends.advancesChange}% this month
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Advance Payments"
+              value={formatCurrency(kpis.totalAdvances)}
+              trend={{
+                value: trends.advancesChange,
+                label: `${trends.advancesChange >= 0 ? '+' : ''}${trends.advancesChange}% this month`,
+                positive: trends.advancesChange >= 0
+              }}
+              icon="TrendingUp"
+              variant="success"
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center">
-                <Clock className="mr-1 h-4 w-4 text-purple-500" />
-                Pending Payouts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-purple-600">{kpis.payoutsPending}</div>
-              <div className="text-xs text-muted-foreground">
-                Awaiting processing
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Pending Payouts"
+              value={kpis.payoutsPending}
+              subtitle="Awaiting processing"
+              icon="Clock"
+              variant={kpis.payoutsPending > 3 ? 'warning' : 'default'}
+            />
+          </AnimatedStatsCard>
 
-          <Card className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center">
-                <Target className="mr-1 h-4 w-4 text-indigo-500" />
-                Projected Inflow
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-indigo-600">{formatCurrency(kpis.projectedInflow)}</div>
-              <div className="text-xs text-muted-foreground">
-                Expected this month
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <AnimatedStatsCard>
+            <StatsCardContent
+              title="Projected Inflow"
+              value={formatCurrency(kpis.projectedInflow)}
+              subtitle="Expected this month"
+              icon="Target"
+              variant="default"
+            />
+          </AnimatedStatsCard>
+        </AnimatedStatsGrid>
 
         {/* Primary Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
