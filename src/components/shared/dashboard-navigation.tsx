@@ -14,27 +14,52 @@ interface NavigationItem {
 const navigationItems: NavigationItem[] = [
   {
     label: 'Dashboard',
-    href: '/dashboard'
+    href: '/'
   },
   {
     label: 'Collections',
     children: [
-      { label: 'Record Collection', href: '/dashboard/collect' },
-      { label: 'My Collections', href: '/dashboard/my-collections' },
-      { label: 'Pending Collections', href: '/dashboard/collections/pending' }
+      { label: 'Record Collection', href: '/collect' },
+      { label: 'My Collections', href: '/my-collections' },
+      { label: 'Pending Collections', href: '/collections/pending' }
+    ]
+  },
+  {
+    label: 'Closings',
+    children: [
+      { label: 'Create Closing Session', href: '/closings/create' },
+      { label: 'Manage Closings', href: '/closings' },
+      { label: 'Approval Queue', href: '/approvals' }
     ]
   },
   {
     label: 'Chit Funds',
-    href: '/dashboard/chit-funds'
+    href: '/chit-funds'
+  },
+  {
+    label: 'Reports',
+    children: [
+      { label: 'Financial Reports', href: '/reports/financial' },
+      { label: 'Collection Reports', href: '/reports/collections' },
+      { label: 'Member Reports', href: '/reports/members' },
+      { label: 'Performance Reports', href: '/reports/performance' }
+    ]
   },
   {
     label: 'Members',
-    href: '/dashboard/members'
+    href: '/members'
+  },
+  {
+    label: 'Arrears',
+    href: '/arrears'
+  },
+  {
+    label: 'Advances',
+    href: '/advances'
   },
   {
     label: 'Users Management',
-    href: '/dashboard/users'
+    href: '/users'
   }
 ]
 

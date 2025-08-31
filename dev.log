@@ -1,0 +1,12 @@
+
+> chit-fund@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use by process 29936, using available port 3005 instead.
+   ▲ Next.js 15.5.2
+   - Local:        http://localhost:3005
+   - Network:      http://192.168.8.127:3005
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1881ms

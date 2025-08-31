@@ -3,7 +3,16 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onFocus, ...props }, ref) => {
+    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      // Auto-select content for number inputs
+      if (type === "number") {
+        e.target.select();
+      }
+      // Call original onFocus if provided
+      onFocus?.(e);
+    };
+
     return (
       <input
         type={type}
@@ -13,6 +22,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         ref={ref}
         {...props}
+        onFocus={handleFocus}
       />
     )
   }

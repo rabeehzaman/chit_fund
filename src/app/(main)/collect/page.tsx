@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { ChitFundSelector, CycleSelector, MemberSelector } from '@/components/shared'
+import { PaymentPreview } from '@/components/shared/payment-preview'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -14,21 +15,38 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
-import { Save, CheckCircle } from 'lucide-react'
+import { Save, CheckCircle, AlertCircle } from 'lucide-react'
 import { ensureSystemProfile, getAnyProfileId, SYSTEM_PROFILE_ID } from '@/lib/system'
+import { calculatePaymentLimits, validatePaymentAmount, getPaymentMessage } from '@/lib/payment-utils'
+import type { PaymentLimits } from '@/lib/payment-utils'
 
-const collectionFormSchema = z.object({
-  collectorId: z.string().min(1, 'Please select the collector who collected this payment'),
-  chitFundId: z.string().min(1, 'Please select a chit fund'),
-  cycleId: z.string().min(1, 'Please select a cycle'),
-  memberId: z.string().min(1, 'Please select a member'),
-  amountCollected: z.number().min(0.01, 'Amount must be greater than 0'),
-  paymentMethod: z.enum(['cash', 'transfer'], {
-    required_error: 'Please select a payment method'
-  }),
-  collectionDate: z.string().min(1, 'Please enter collection date'),
-  notes: z.string().optional()
-})
+// Dynamic validation schema creator
+const createCollectionFormSchema = (paymentLimits?: PaymentLimits) => {
+  return z.object({
+    collectorId: z.string().min(1, 'Please select the collector who collected this payment'),
+    chitFundId: z.string().min(1, 'Please select a chit fund'),
+    cycleId: z.string().min(1, 'Please select a cycle'),
+    memberId: z.string().min(1, 'Please select a member'),
+    amountCollected: z.number()
+      .min(0.01, 'Amount must be greater than 0')
+      .refine((value) => {
+        if (!paymentLimits) return true
+        const validation = validatePaymentAmount(value, paymentLimits)
+        return validation.isValid
+      }, {
+        message: paymentLimits ? 
+          `Payment must be between ₹${paymentLimits.minimum.toFixed(2)} and ₹${paymentLimits.maximum.toFixed(2)}` :
+          'Invalid payment amount'
+      }),
+    paymentMethod: z.enum(['cash', 'transfer'], {
+      required_error: 'Please select a payment method'
+    }),
+    collectionDate: z.string().min(1, 'Please enter collection date'),
+    notes: z.string().optional()
+  })
+}
+
+const collectionFormSchema = createCollectionFormSchema()
 
 type CollectionFormValues = z.infer<typeof collectionFormSchema>
 
@@ -38,12 +56,20 @@ export default function CollectPage() {
   const [collectors, setCollectors] = useState<any[]>([])
   const [selectedChitFund, setSelectedChitFund] = useState<string | null>(null)
   const [selectedCycle, setSelectedCycle] = useState<string | null>(null)
+  const [selectedMember, setSelectedMember] = useState<string | null>(null)
+  const [paymentLimits, setPaymentLimits] = useState<PaymentLimits | null>(null)
 
   const form = useForm<CollectionFormValues>({
     resolver: zodResolver(collectionFormSchema),
     defaultValues: {
+      collectorId: '',
+      chitFundId: '',
+      cycleId: '',
+      memberId: '',
+      amountCollected: undefined as any,
+      paymentMethod: 'cash',
       collectionDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'cash'
+      notes: ''
     }
   })
 
@@ -65,6 +91,44 @@ export default function CollectPage() {
 
     fetchCollectors()
   }, [])
+
+  // Fetch payment limits when member and chit fund are selected
+  useEffect(() => {
+    const fetchPaymentLimits = async () => {
+      if (!selectedMember || !selectedChitFund) {
+        setPaymentLimits(null)
+        return
+      }
+
+      try {
+        const limits = await calculatePaymentLimits(selectedMember, selectedChitFund)
+        setPaymentLimits(limits)
+        
+        // Update form validation with new limits
+        if (limits) {
+          const newSchema = createCollectionFormSchema(limits)
+          form.clearErrors('amountCollected')
+          
+          // Re-validate current amount if exists
+          const currentAmount = form.getValues('amountCollected')
+          if (currentAmount > 0) {
+            const validation = validatePaymentAmount(currentAmount, limits)
+            if (!validation.isValid) {
+              form.setError('amountCollected', { 
+                type: 'manual', 
+                message: validation.error || 'Invalid payment amount' 
+              })
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching payment limits:', error)
+        setPaymentLimits(null)
+      }
+    }
+
+    fetchPaymentLimits()
+  }, [selectedMember, selectedChitFund, form])
 
   const onSubmit = async (data: CollectionFormValues) => {
     setIsLoading(true)
@@ -116,6 +180,8 @@ export default function CollectPage() {
       // Reset state variables
       setSelectedChitFund(null)
       setSelectedCycle(null)
+      setSelectedMember(null)
+      setPaymentLimits(null)
 
     } catch (error) {
       console.error('Unexpected error:', error)
@@ -187,6 +253,8 @@ export default function CollectPage() {
                                 form.setValue('cycleId', '')
                                 form.setValue('memberId', '')
                                 setSelectedCycle(null)
+                                setSelectedMember(null)
+                                setPaymentLimits(null)
                               }}
                             />
                           </FormControl>
@@ -211,6 +279,8 @@ export default function CollectPage() {
                                 setSelectedCycle(value)
                                 // Reset member selection when cycle changes
                                 form.setValue('memberId', '')
+                                setSelectedMember(null)
+                                setPaymentLimits(null)
                               }}
                             />
                           </FormControl>
@@ -230,7 +300,10 @@ export default function CollectPage() {
                             <MemberSelector
                               chitFundId={selectedChitFund}
                               value={field.value}
-                              onValueChange={field.onChange}
+                              onValueChange={(value) => {
+                                field.onChange(value)
+                                setSelectedMember(value)
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -243,21 +316,70 @@ export default function CollectPage() {
                       <FormField
                         control={form.control}
                         name="amountCollected"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Amount Collected *</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                {...field}
-                                onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const currentAmount = field.value || 0
+                          const getInputColorClass = () => {
+                            if (!paymentLimits || currentAmount === 0) return ''
+                            if (currentAmount === paymentLimits.installmentAmount) return 'border-green-500 focus:border-green-500'
+                            if (currentAmount > paymentLimits.installmentAmount && currentAmount <= paymentLimits.maximum) return 'border-blue-500 focus:border-blue-500'
+                            if (currentAmount > paymentLimits.maximum) return 'border-red-500 focus:border-red-500'
+                            return 'border-yellow-500 focus:border-yellow-500'
+                          }
+                          
+                          return (
+                            <FormItem>
+                              <FormLabel className="flex items-center justify-between">
+                                <span>Amount Collected *</span>
+                                {paymentLimits && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Min: ₹{paymentLimits.minimum.toFixed(2)} | Max: ₹{paymentLimits.maximum.toFixed(2)}
+                                  </span>
+                                )}
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder={paymentLimits ? paymentLimits.installmentAmount.toFixed(2) : "0.00"}
+                                  className={getInputColorClass()}
+                                  {...field}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value) || 0
+                                    field.onChange(value)
+                                    
+                                    // Real-time validation
+                                    if (paymentLimits && value > 0) {
+                                      const validation = validatePaymentAmount(value, paymentLimits)
+                                      if (!validation.isValid) {
+                                        form.setError('amountCollected', {
+                                          type: 'manual',
+                                          message: validation.error || 'Invalid payment amount'
+                                        })
+                                      } else {
+                                        form.clearErrors('amountCollected')
+                                      }
+                                    }
+                                  }}
+                                />
+                              </FormControl>
+                              {paymentLimits && currentAmount > 0 && (
+                                <div className="text-xs mt-1">
+                                  {(() => {
+                                    const message = getPaymentMessage(currentAmount, paymentLimits)
+                                    const colorClass = {
+                                      success: 'text-green-600',
+                                      info: 'text-blue-600',
+                                      warning: 'text-yellow-600',
+                                      error: 'text-red-600'
+                                    }[message.type]
+                                    return <span className={colorClass}>{message.message}</span>
+                                  })()}
+                                </div>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )
+                        }}
                       />
 
                       <FormField
@@ -339,38 +461,13 @@ export default function CollectPage() {
             </Card>
           </div>
 
-          {/* Help Panel */}
+          {/* Payment Preview Panel */}
           <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
-                  Collection Tips
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-medium text-sm">Step-by-step Process</h4>
-                  <ol className="text-sm text-gray-600 mt-1 space-y-1">
-                    <li>1. Select the chit fund</li>
-                    <li>2. Choose the appropriate cycle</li>
-                    <li>3. Select the member who paid</li>
-                    <li>4. Enter the amount collected</li>
-                    <li>5. Choose payment method</li>
-                    <li>6. Add any relevant notes</li>
-                  </ol>
-                </div>
-                <div>
-                  <h4 className="font-medium text-sm">Important Notes</h4>
-                  <ul className="text-sm text-gray-600 mt-1 space-y-1">
-                    <li>• All entries are saved as &quot;pending close&quot;</li>
-                    <li>• Collections must be closed before final posting</li>
-                    <li>• Verify member and amount before submitting</li>
-                    <li>• Add notes for special circumstances</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
+            <PaymentPreview
+              memberId={selectedMember}
+              chitFundId={selectedChitFund}
+              paymentAmount={form.watch('amountCollected') || 0}
+            />
           </div>
         </div>
     </div>

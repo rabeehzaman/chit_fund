@@ -57,7 +57,7 @@ export default function CreateClosingSessionPage() {
     resolver: zodResolver(closingSessionSchema),
     defaultValues: {
       sessionDate: new Date().toISOString().split('T')[0],
-      declaredTotal: 0
+      declaredTotal: undefined as any
     }
   })
 

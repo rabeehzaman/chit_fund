@@ -19,7 +19,7 @@ const createChitFundSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters").max(100, "Name must be less than 100 characters"),
   total_amount: z.coerce.number().min(1000, "Total amount must be at least ₹1,000").max(10000000, "Total amount must be less than ₹1,00,00,000"),
   installment_amount: z.coerce.number().min(100, "Installment must be at least ₹100").max(1000000, "Installment must be less than ₹10,00,000"),
-  duration_months: z.coerce.number().min(6, "Duration must be at least 6 months").max(120, "Duration must be less than 120 months"),
+  duration_months: z.coerce.number().min(1, "Duration must be at least 1 month").max(120, "Duration must be less than 120 months"),
   start_date: z.string().min(1, "Start date is required"),
   description: z.string().optional(),
 }).refine(
@@ -246,7 +246,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
                       <FormControl>
                         <Input
                           type="number"
-                          min={6}
+                          min={1}
                           max={120}
                           disabled={isLoading}
                           {...field}

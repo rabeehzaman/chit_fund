@@ -63,7 +63,7 @@ export default function EditClosingSessionPage() {
   const form = useForm<ClosingSessionFormValues>({
     resolver: zodResolver(closingSessionSchema),
     defaultValues: {
-      declaredTotal: 0
+      declaredTotal: undefined as any
     }
   })
 

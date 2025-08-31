@@ -88,10 +88,17 @@ export function WinnerSelectionDialog({
 
       setEligibleMembers(data || [])
     } catch (error) {
-      console.error('Error fetching eligible members:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
+      console.error('Error fetching eligible members:', {
+        message: errorMessage,
+        error: error,
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      
       toast({
         title: "Error",
-        description: "Failed to fetch eligible members",
+        description: `Failed to fetch eligible members: ${errorMessage}`,
         variant: "destructive"
       })
     } finally {
@@ -159,7 +166,7 @@ export function WinnerSelectionDialog({
             net_payout_amount: payoutAmount,
             payout_date: new Date().toISOString().split('T')[0],
             notes: notes || `Winner selected for Cycle ${cycle.cycle_number}`,
-            created_by: 'system-admin', // Default admin context
+            created_by: '00000000-0000-0000-0000-000000000000', // System admin UUID
             status: 'pending'
           })
 
@@ -180,10 +187,17 @@ export function WinnerSelectionDialog({
       router.refresh()
       
     } catch (error) {
-      console.error('Error selecting winner:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
+      console.error('Error selecting winner:', {
+        message: errorMessage,
+        error: error,
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      
       toast({
         title: "Error",
-        description: "Failed to select winner. Please try again.",
+        description: `Failed to select winner: ${errorMessage}`,
         variant: "destructive"
       })
     } finally {
