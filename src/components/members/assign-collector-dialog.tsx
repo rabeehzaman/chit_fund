@@ -128,8 +128,7 @@ export function AssignCollectorDialog({
 
       form.reset()
       setOpen(false)
-      // Force a full page refresh to ensure fresh data
-      window.location.reload()
+      router.refresh()
       
     } catch (error) {
       console.error("Assign collector catch error:", error)

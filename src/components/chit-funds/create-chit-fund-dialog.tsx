@@ -134,8 +134,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
 
       form.reset()
       setOpen(false)
-      // Force a full page refresh to ensure fresh data
-      window.location.reload()
+      router.refresh()
       
     } catch (error) {
       console.error("Create chit fund catch error:", error)

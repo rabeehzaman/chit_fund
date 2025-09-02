@@ -87,8 +87,7 @@ export function EditMemberDialog({ children, member }: EditMemberDialogProps) {
       })
 
       setOpen(false)
-      // Force a full page refresh to ensure fresh data
-      window.location.reload()
+      router.refresh()
     } catch (error) {
       console.error('Unexpected error:', error)
       toast({
