@@ -3,7 +3,19 @@
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardProps } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { springs, staggerDelay, conditionalAnimation } from "@/lib/animations"
+import { springs, staggerDelay, conditionalAnimation, prefersReducedMotion } from "@/lib/animations"
+import {
+  DollarSign,
+  Target,
+  Activity,
+  BarChart3,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  Users,
+  Wallet
+} from "lucide-react"
 
 interface AnimatedStatsCardProps extends CardProps {
   index?: number
@@ -18,18 +30,26 @@ export function AnimatedStatsCard({
   delay = 0,
   ...props 
 }: AnimatedStatsCardProps) {
-  const [isVisible, setIsVisible] = React.useState(false)
+  // Start with true for SSR to match initial client render
+  const [isVisible, setIsVisible] = React.useState(true)
+  const [isClient, setIsClient] = React.useState(false)
   
-  // Trigger entrance animation on mount
+  // Detect client-side rendering
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(true)
-    }, delay + (index * 100)) // Stagger by index
-    
-    return () => clearTimeout(timer)
+    setIsClient(true)
+    // Only animate if we're on the client and the user doesn't prefer reduced motion
+    if (!prefersReducedMotion()) {
+      setIsVisible(false)
+      const timer = setTimeout(() => {
+        setIsVisible(true)
+      }, delay + (index * 100))
+      
+      return () => clearTimeout(timer)
+    }
   }, [index, delay])
   
-  const animationStyle = {
+  // Use consistent initial styles for SSR/hydration
+  const animationStyle = isClient ? {
     transform: conditionalAnimation(
       isVisible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.95)',
       isVisible ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.98)'
@@ -39,6 +59,11 @@ export function AnimatedStatsCard({
       `all ${springs.medium}`,
       'all 300ms ease-out'
     )
+  } : {
+    // Default state for SSR - visible and ready
+    transform: 'translateY(0) scale(1)',
+    opacity: 1,
+    transition: 'none'
   }
   
   return (
@@ -76,28 +101,35 @@ export function StatsCardContent({
   icon: iconName,
   variant = 'default'
 }: StatsCardContentProps) {
-  const [animateValue, setAnimateValue] = React.useState(false)
+  // Start with true for SSR to prevent hydration mismatch
+  const [animateValue, setAnimateValue] = React.useState(true)
+  const [isClient, setIsClient] = React.useState(false)
   
   React.useEffect(() => {
-    const timer = setTimeout(() => setAnimateValue(true), 200)
-    return () => clearTimeout(timer)
+    setIsClient(true)
+    // Only animate if we're on the client and the user doesn't prefer reduced motion
+    if (!prefersReducedMotion()) {
+      setAnimateValue(false)
+      const timer = setTimeout(() => setAnimateValue(true), 200)
+      return () => clearTimeout(timer)
+    }
   }, [])
   
-  // Icon mapping - import icons dynamically
+  // Icon mapping - use static imports to avoid hydration mismatch
   const getIcon = (name?: string) => {
     if (!name) return null
     
     const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-      'DollarSign': require('lucide-react').DollarSign,
-      'Target': require('lucide-react').Target,
-      'Activity': require('lucide-react').Activity,
-      'BarChart3': require('lucide-react').BarChart3,
-      'AlertTriangle': require('lucide-react').AlertTriangle,
-      'TrendingUp': require('lucide-react').TrendingUp,
-      'TrendingDown': require('lucide-react').TrendingDown,
-      'Clock': require('lucide-react').Clock,
-      'Users': require('lucide-react').Users,
-      'Wallet': require('lucide-react').Wallet
+      'DollarSign': DollarSign,
+      'Target': Target,
+      'Activity': Activity,
+      'BarChart3': BarChart3,
+      'AlertTriangle': AlertTriangle,
+      'TrendingUp': TrendingUp,
+      'TrendingDown': TrendingDown,
+      'Clock': Clock,
+      'Users': Users,
+      'Wallet': Wallet
     }
     
     return iconMap[name] || null
@@ -130,13 +162,18 @@ export function StatsCardContent({
         <div 
           className={cn(
             "text-2xl font-bold transition-all duration-500 transform-gpu",
-            animateValue ? "scale-100 opacity-100" : "scale-95 opacity-70"
+            // For SSR/initial render, always show as fully visible
+            isClient 
+              ? (animateValue ? "scale-100 opacity-100" : "scale-95 opacity-70")
+              : "scale-100 opacity-100"
           )}
-          style={{
+          style={isClient ? {
             transition: conditionalAnimation(
               `all ${springs.bounce}`,
               'all 500ms ease-out'
             )
+          } : {
+            transition: 'none'
           }}
         >
           {value}

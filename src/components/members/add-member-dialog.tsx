@@ -132,7 +132,8 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
 
       form.reset()
       setOpen(false)
-      router.refresh()
+      // Force a full page refresh to ensure fresh data
+      window.location.reload()
       
     } catch (error) {
       console.error("Add member catch error:", error)

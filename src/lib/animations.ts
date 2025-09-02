@@ -114,8 +114,15 @@ export const variants = {
  * @returns boolean indicating if reduced motion is preferred
  */
 export const prefersReducedMotion = (): boolean => {
+  // Always return false during SSR to ensure consistent initial render
   if (typeof window === 'undefined') return false
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch (error) {
+    // Fallback for environments where matchMedia is not supported
+    return false
+  }
 }
 
 /**
@@ -128,6 +135,12 @@ export const conditionalAnimation = (
   animationClass: string, 
   fallbackClass?: string
 ): string => {
+  // During SSR, always use the full animation to match initial client render
+  // The client will adjust on the next render if needed
+  if (typeof window === 'undefined') {
+    return animationClass
+  }
+  
   if (prefersReducedMotion()) {
     return fallbackClass || ''
   }

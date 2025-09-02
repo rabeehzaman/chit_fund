@@ -10,31 +10,36 @@ import { EditChitFundDialog } from '@/components/chit-funds/edit-chit-fund-dialo
 import { formatCurrency } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 
-// Disable caching to ensure fresh data
+// Force dynamic rendering and disable all caching
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 export const revalidate = 0
 
 export default async function ChitFundsPage() {
   // Fetch real data from Supabase (authentication removed, RLS disabled)
   const supabase = createClient()
 
-  // Fetch chit funds with member counts
-  const { data: chitFunds } = await supabase
-    .from('chit_funds')
-    .select(`
-      *,
-      chit_fund_members(count)
-    `)
-    .order('created_at', { ascending: false })
+  // Fetch data in parallel for better performance
+  const [
+    { data: chitFunds },
+    { count: totalMembers }
+  ] = await Promise.all([
+    supabase
+      .from('chit_funds')
+      .select(`
+        *,
+        chit_fund_members(count)
+      `)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('members')
+      .select('*', { count: 'exact', head: true })
+  ])
 
   // Calculate stats
   const totalFunds = chitFunds?.length || 0
   const activeFunds = chitFunds?.filter(fund => fund.status === 'active').length || 0
   const totalValue = chitFunds?.reduce((sum, fund) => sum + parseFloat(fund.total_amount || '0'), 0) || 0
-
-  // Fetch total members count
-  const { count: totalMembers } = await supabase
-    .from('members')
-    .select('*', { count: 'exact', head: true })
 
   const mockProfile = {
     role: 'admin',

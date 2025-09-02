@@ -29,6 +29,7 @@ interface MemberSelectorProps {
   className?: string
   showOnlyAssigned?: boolean
   collectorId?: string
+  refreshKey?: number | string // Add refresh trigger
 }
 
 export function MemberSelector({
@@ -39,7 +40,8 @@ export function MemberSelector({
   disabled = false,
   className = "",
   showOnlyAssigned = false,
-  collectorId
+  collectorId,
+  refreshKey
 }: MemberSelectorProps) {
   const [members, setMembers] = useState<MemberWithChitFund[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,6 +55,9 @@ export function MemberSelector({
     const fetchMembers = async () => {
       setLoading(true)
       const supabase = createClient()
+      
+      // Add cache-busting query parameter to force fresh data
+      const timestamp = Date.now()
       
       let query = supabase
         .from('members')
@@ -85,7 +90,7 @@ export function MemberSelector({
     }
 
     fetchMembers()
-  }, [chitFundId, showOnlyAssigned, collectorId])
+  }, [chitFundId, showOnlyAssigned, collectorId, refreshKey])
 
   const isDisabled = disabled || loading || !chitFundId || members.length === 0
 

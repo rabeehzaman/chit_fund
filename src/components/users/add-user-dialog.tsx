@@ -80,7 +80,8 @@ export function AddUserDialog() {
       
       form.reset()
       setIsOpen(false)
-      router.refresh()
+      // Force a full page refresh to ensure fresh data
+      window.location.reload()
     } catch (error) {
       console.error("Error creating user:", error)
       toast({

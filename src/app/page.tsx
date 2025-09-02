@@ -29,6 +29,7 @@ import { ArrearsAgingChart } from '@/components/charts/arrears-aging-chart'
 import { CashFlowChart } from '@/components/charts/cash-flow-chart'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { MainLayout } from '@/components/layout/main-layout'
+import { ClientTimeBadge } from '@/components/ui/client-time-badge'
 
 interface DashboardKPIs {
   totalFunds: number
@@ -188,10 +189,7 @@ export default async function HomePage() {
               <RefreshCw className="mr-1 h-4 w-4" />
               Refresh Data
             </Button>
-            <Badge variant="outline">
-              <Clock className="mr-1 h-3 w-3" />
-              Updated: {new Date().toLocaleTimeString()}
-            </Badge>
+            <ClientTimeBadge />
           </div>
         </div>
 

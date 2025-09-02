@@ -1,4 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
+
+// Force dynamic rendering and disable all caching
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
+
 // Auth removed; no redirects
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
