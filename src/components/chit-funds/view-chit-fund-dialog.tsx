@@ -16,7 +16,7 @@ interface ViewChitFundDialogProps {
     id: string
     name: string
     total_amount: string
-    installment_amount: string
+    installment_per_member: string
     duration_months: number
     interest_rate: number
     status: string
@@ -30,7 +30,7 @@ export function ViewChitFundDialog({ children, chitFund }: ViewChitFundDialogPro
 
   const memberCount = chitFund.chit_fund_members?.length || 0
   const totalAmount = parseFloat(chitFund.total_amount)
-  const installmentAmount = parseFloat(chitFund.installment_amount)
+  const installmentAmount = parseFloat(chitFund.installment_per_member)
 
   const getBadgeVariant = (status: string) => {
     switch (status) {

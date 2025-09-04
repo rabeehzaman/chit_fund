@@ -109,11 +109,6 @@ const navigationItems: NavigationItem[] = [
     icon: AlertCircle
   },
   {
-    label: 'Advances',
-    href: '/advances',
-    icon: TrendingUp
-  },
-  {
     label: 'Users Management',
     href: '/users',
     icon: UserCog

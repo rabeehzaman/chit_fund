@@ -66,6 +66,31 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
   async function onSubmit(data: AddMemberForm) {
     setIsLoading(true)
     try {
+      // Check for duplicate member names first
+      const { data: isDuplicate, error: duplicateCheckError } = await supabase
+        .rpc('check_duplicate_member_name', { member_name: data.full_name })
+
+      if (duplicateCheckError) {
+        console.error("Duplicate check error:", duplicateCheckError)
+        toast({
+          title: "Error",
+          description: "Failed to check for duplicate names. Please try again.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      if (isDuplicate) {
+        toast({
+          title: "Duplicate Member Name", 
+          description: `A member with the name "${data.full_name}" already exists. Please use a different name.`,
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
       // Ensure a system profile exists (no auth mode) and pick a creator id
       await ensureSystemProfile(supabase)
       const creatorId = await getAnyProfileId(supabase)
@@ -91,11 +116,30 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
           description: (memberError as any)?.message || (memberError as any)?.details || "Failed to add member. Please try again.",
           variant: "destructive",
         })
+        setIsLoading(false)
         return
       }
 
       // If chit fund is selected, add member to chit fund
       if (data.chit_fund_id && data.auto_assign) {
+        // Check if member can be added to this chit fund
+        const { data: validationResult } = await supabase
+          .rpc('can_add_member_to_chit_fund', {
+            p_chit_fund_id: data.chit_fund_id,
+            p_member_id: member.id
+          })
+
+        const validation = validationResult?.[0]
+        if (!validation?.can_add) {
+          toast({
+            title: "Cannot Add Member",
+            description: validation?.reason || "Member cannot be added to this chit fund",
+            variant: "destructive"
+          })
+          setIsLoading(false)
+          return
+        }
+
         const { error: assignmentError } = await supabase
           .from('chit_fund_members')
           .insert({
@@ -108,10 +152,21 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
         if (assignmentError) {
           console.error("Assignment error:", assignmentError)
           toast({
-            title: "Warning",
+            title: "Warning", 
             description: `Member "${data.full_name}" created but assignment to chit fund failed. You can assign manually later.`,
             variant: "destructive",
           })
+          
+          // For assignment errors, close dialog and refresh to show the member was created
+          form.reset()
+          setOpen(false)
+          
+          // Refresh after showing the warning message
+          setTimeout(() => {
+            router.refresh()
+          }, 3000)
+          setIsLoading(false)
+          return
         } else {
           const selectedFund = chitFunds.find(fund => fund.id === data.chit_fund_id)
           const selectedCollector = data.assigned_collector_id && data.assigned_collector_id !== 'none' 
@@ -132,7 +187,11 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
 
       form.reset()
       setOpen(false)
-      router.refresh()
+      
+      // Delay page refresh to allow toast messages to be seen
+      setTimeout(() => {
+        router.refresh()
+      }, 2000)
       
     } catch (error) {
       console.error("Add member catch error:", error)

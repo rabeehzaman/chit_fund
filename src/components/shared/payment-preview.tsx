@@ -20,12 +20,14 @@ export function PaymentPreview({ memberId, chitFundId, paymentAmount }: PaymentP
   const [limits, setLimits] = useState<PaymentLimits | null>(null)
   const [breakdown, setBreakdown] = useState<PaymentBreakdown | null>(null)
   const [loading, setLoading] = useState(false)
+  const [currentCyclePaid, setCurrentCyclePaid] = useState<number>(0)
 
   useEffect(() => {
     const fetchLimits = async () => {
       if (!memberId || !chitFundId) {
         setLimits(null)
         setBreakdown(null)
+        setCurrentCyclePaid(0)
         return
       }
 
@@ -33,6 +35,26 @@ export function PaymentPreview({ memberId, chitFundId, paymentAmount }: PaymentP
       try {
         const paymentLimits = await calculatePaymentLimits(memberId, chitFundId)
         setLimits(paymentLimits)
+        // Fetch current active cycle sum for this member
+        const supabase = (await import('@/lib/supabase/client')).createClient()
+        const { data: activeCycle } = await supabase
+          .from('cycles')
+          .select('id')
+          .eq('chit_fund_id', chitFundId)
+          .eq('status', 'active')
+          .single()
+        if (activeCycle?.id) {
+          const { data: entries } = await supabase
+            .from('collection_entries')
+            .select('amount_collected, status')
+            .eq('member_id', memberId)
+            .eq('cycle_id', activeCycle.id)
+            .in('status', ['pending_close', 'closed'])
+          const sum = (entries || []).reduce((s: number, e: any) => s + parseFloat(e.amount_collected), 0)
+          setCurrentCyclePaid(sum)
+        } else {
+          setCurrentCyclePaid(0)
+        }
         
         if (paymentLimits && paymentAmount > 0) {
           const paymentBreakdown = calculatePaymentBreakdown(paymentAmount, paymentLimits)
@@ -44,6 +66,7 @@ export function PaymentPreview({ memberId, chitFundId, paymentAmount }: PaymentP
         console.error('Error fetching payment limits:', error)
         setLimits(null)
         setBreakdown(null)
+        setCurrentCyclePaid(0)
       } finally {
         setLoading(false)
       }
@@ -202,13 +225,13 @@ export function PaymentPreview({ memberId, chitFundId, paymentAmount }: PaymentP
               <div>
                 <div className="text-muted-foreground">Current Cycle</div>
                 <div className="font-semibold">
-                  {formatCurrency(breakdown.currentCycle)}
+                  {formatCurrency(Math.min((limits?.installmentAmount || 0) - currentCyclePaid, breakdown.currentCycle))}
                 </div>
               </div>
               <div>
                 <div className="text-muted-foreground">Advance Amount</div>
                 <div className="font-semibold text-blue-600">
-                  {formatCurrency(breakdown.advanceAmount)}
+                  {formatCurrency(Math.max(0, breakdown.advanceAmount + Math.max(0, breakdown.currentCycle - Math.max(0, (limits?.installmentAmount || 0) - currentCyclePaid))))}
                 </div>
               </div>
             </div>
@@ -226,7 +249,7 @@ export function PaymentPreview({ memberId, chitFundId, paymentAmount }: PaymentP
               <div className="flex justify-between text-sm">
                 <span>Remaining After Payment:</span>
                 <span className="font-medium text-orange-600">
-                  {formatCurrency(breakdown.remainingAfterPayment)}
+                  {formatCurrency(Math.max(0, (limits.totalObligation - limits.totalPaid) - paymentAmount))}
                 </span>
               </div>
             </div>

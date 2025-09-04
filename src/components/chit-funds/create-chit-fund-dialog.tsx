@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -17,23 +17,24 @@ import { CalendarDays, DollarSign, Hash, Users } from "lucide-react"
 
 const createChitFundSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters").max(100, "Name must be less than 100 characters"),
-  total_amount: z.coerce.number().min(1000, "Total amount must be at least ₹1,000").max(10000000, "Total amount must be less than ₹1,00,00,000"),
-  installment_amount: z.coerce.number().min(100, "Installment must be at least ₹100").max(1000000, "Installment must be less than ₹10,00,000"),
+  installment_per_member: z.union([z.coerce.number(), z.literal("")]).optional().refine((val) => {
+    if (val === "" || val === undefined) return true
+    return val >= 100 && val <= 1000000
+  }, {
+    message: "Installment per member must be between ₹100 and ₹10,00,000"
+  }),
   duration_months: z.coerce.number().min(1, "Duration must be at least 1 month").max(120, "Duration must be less than 120 months"),
+  max_members: z.coerce.number().min(1, "At least 1 member required").max(120, "Maximum 120 members allowed"),
   start_date: z.string().min(1, "Start date is required"),
   description: z.string().optional(),
 }).refine(
   (data) => {
-    // Basic validation: total_amount should be roughly equal to installment_amount * duration_months
-    // Allow some flexibility (±10%) for practical purposes
-    const expected = data.installment_amount * data.duration_months
-    const difference = Math.abs(data.total_amount - expected)
-    const tolerance = expected * 0.1 // 10% tolerance
-    return difference <= tolerance
+    // Validation: max_members should not exceed duration_months (traditional model)
+    return data.max_members <= data.duration_months
   },
   {
-    message: "Total amount should roughly equal installment amount × duration months",
-    path: ["total_amount"],
+    message: "Maximum members cannot exceed duration months (each member can win only once)",
+    path: ["max_members"],
   }
 )
 
@@ -54,18 +55,29 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
     resolver: zodResolver(createChitFundSchema),
     defaultValues: {
       name: "",
-      total_amount: 0,
-      installment_amount: 0,
+      installment_per_member: undefined as any,
       duration_months: 12,
+      max_members: 12,
       start_date: "",
       description: "",
     },
   })
 
   // Watch values to provide real-time calculations
-  const watchedInstallment = form.watch("installment_amount")
+  const watchedInstallment = form.watch("installment_per_member")
   const watchedDuration = form.watch("duration_months")
-  const suggestedTotal = watchedInstallment * watchedDuration
+  const watchedMaxMembers = form.watch("max_members")
+
+  // Dynamic calculations (handle undefined values)
+  const maxPossibleMonthlyCollection = (watchedInstallment || 0) * watchedMaxMembers
+  const maxPossibleFundValue = maxPossibleMonthlyCollection * watchedDuration
+
+  // Auto-update max_members to match duration (traditional model)
+  React.useEffect(() => {
+    if (watchedDuration && watchedDuration !== watchedMaxMembers) {
+      form.setValue('max_members', watchedDuration)
+    }
+  }, [watchedDuration, watchedMaxMembers, form])
 
   async function onSubmit(data: CreateChitFundForm) {
     setIsLoading(true)
@@ -79,9 +91,10 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
         .from('chit_funds')
         .insert({
           name: data.name,
-          total_amount: data.total_amount,
-          installment_amount: data.installment_amount,
+          total_amount: maxPossibleFundValue, // Keep for backward compatibility, but will be calculated dynamically
+          installment_per_member: data.installment_per_member,
           duration_months: data.duration_months,
+          max_members: data.max_members,
           start_date: data.start_date,
           status: 'planning',
           ...(creatorId ? { created_by: creatorId } : {}),
@@ -214,19 +227,23 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="installment_amount"
+                  name="installment_per_member"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4" />
-                        Monthly Installment (₹)
+                        Installment Per Member (₹)
                       </FormLabel>
                       <FormControl>
                         <Input
                           type="number"
-                          placeholder="5000"
+                          placeholder="1000"
                           disabled={isLoading}
                           {...field}
+                          onFocus={(e) => {
+                            // Auto-select all content when focused for better UX
+                            e.target.select()
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -250,6 +267,10 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
                           max={120}
                           disabled={isLoading}
                           {...field}
+                          onFocus={(e) => {
+                            // Auto-select all content when focused for better UX
+                            e.target.select()
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -260,30 +281,56 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
 
               <FormField
                 control={form.control}
-                name="total_amount"
+                name="max_members"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">
                       <Users className="h-4 w-4" />
-                      Total Fund Amount (₹)
+                      Maximum Members Allowed
                     </FormLabel>
                     <FormControl>
                       <Input
                         type="number"
-                        placeholder={suggestedTotal > 0 ? suggestedTotal.toString() : "60000"}
+                        placeholder="12"
+                        min={1}
+                        max={120}
                         disabled={isLoading}
                         {...field}
+                        onFocus={(e) => {
+                          // Auto-select all content when focused for better UX
+                          e.target.select()
+                        }}
                       />
                     </FormControl>
-                    {suggestedTotal > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Suggested: ₹{suggestedTotal.toLocaleString()} (based on installment × duration)
-                      </p>
-                    )}
+                    <p className="text-sm text-muted-foreground">
+                      Each member can win only once. Traditionally equals duration months.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Dynamic Calculation Display */}
+              {maxPossibleFundValue > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 mb-3">Dynamic Fund Calculations</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-700 font-medium">Max Monthly Collection:</span>
+                      <p className="text-blue-900">₹{maxPossibleMonthlyCollection.toLocaleString()}</p>
+                      <p className="text-xs text-blue-600">{watchedMaxMembers} members × ₹{watchedInstallment}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Max Fund Value:</span>
+                      <p className="text-blue-900">₹{maxPossibleFundValue.toLocaleString()}</p>
+                      <p className="text-xs text-blue-600">If all {watchedMaxMembers} members join</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-blue-600">
+                    💡 Actual fund value will grow as members join the chit fund
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Timeline */}

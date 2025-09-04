@@ -102,7 +102,7 @@ export function ArrearsAgingChart() {
           .select(`
             *,
             members!member_balances_member_id_fkey(full_name),
-            chit_funds!member_balances_chit_fund_id_fkey(name, installment_amount)
+            chit_funds!member_balances_chit_fund_id_fkey(name, installment_per_member)
           `)
           .gt('arrears_amount', 0)
 

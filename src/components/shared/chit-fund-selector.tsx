@@ -71,7 +71,7 @@ export function ChitFundSelector({
             <div className="flex flex-col">
               <span className="font-medium">{fund.name}</span>
               <span className="text-sm text-muted-foreground">
-                ₹{fund.installment_amount} × {fund.duration_months} months
+                ₹{fund.installment_per_member} × {fund.duration_months} months
               </span>
             </div>
           </SelectItem>

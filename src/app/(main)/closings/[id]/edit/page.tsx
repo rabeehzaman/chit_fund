@@ -23,7 +23,7 @@ import Link from 'next/link'
 type CollectionEntry = Tables<'collection_entries'> & {
   chit_funds: {
     name: string
-    installment_amount: number
+    installment_per_member: number
   }
   cycles: {
     cycle_number: number
@@ -97,7 +97,7 @@ export default function EditClosingSessionPage() {
             amount_collected,
             collection_date,
             payment_method,
-            chit_funds (name, installment_amount),
+            chit_funds (name, installment_per_member),
             cycles (cycle_number, cycle_date),
             members (full_name, phone)
           )
@@ -154,7 +154,7 @@ export default function EditClosingSessionPage() {
           amount_collected,
           collection_date,
           payment_method,
-          chit_funds (name, installment_amount),
+          chit_funds (name, installment_per_member),
           cycles (cycle_number, cycle_date),
           members (full_name, phone)
         `)
@@ -406,7 +406,15 @@ export default function EditClosingSessionPage() {
                               step="0.01"
                               placeholder="0.00"
                               {...field}
-                              onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                              onFocus={(e) => {
+                                // Auto-select all content when focused for better UX
+                                e.target.select()
+                              }}
+                              onChange={(e) => {
+                                const inputValue = e.target.value
+                                const value = inputValue === '' ? undefined : parseFloat(inputValue) || 0
+                                field.onChange(value)
+                              }}
                             />
                           </FormControl>
                           <FormMessage />

@@ -25,7 +25,7 @@ interface Cycle {
 interface ChitFund {
   id: string
   name: string
-  installment_amount: string
+  installment_per_member: string
 }
 
 interface Winner {
@@ -99,11 +99,17 @@ export function PayoutDialog({
 
     setIsSubmitting(true)
     try {
+      // Get system admin ID
+      const { data: systemAdminId, error: adminError } = await supabase
+        .rpc('get_system_admin_id')
+      
+      if (adminError) throw adminError
+
       // Update the existing payout record with payment details
       const updateData: any = {
         payout_method: payoutMethod,
         notes: notes || `Payout processed for Cycle ${cycle.cycle_number}`,
-        approved_by: 'system-admin',
+        approved_by: systemAdminId,
         approved_at: new Date().toISOString(),
         status: 'paid',
         updated_at: new Date().toISOString()

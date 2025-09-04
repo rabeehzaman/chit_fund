@@ -90,7 +90,7 @@ export function CashFlowChart() {
         const { data: activeFunds, error: fundsError } = await supabase
           .from('chit_funds')
           .select(`
-            installment_amount,
+            installment_per_member,
             chit_fund_members!chit_fund_members_chit_fund_id_fkey(
               member_id
             )
@@ -144,7 +144,7 @@ export function CashFlowChart() {
         // Calculate projected inflows for future months
         const monthlyProjectedInflow = activeFunds?.reduce((total, fund: any) => {
           const memberCount = fund.chit_fund_members?.length || 0
-          return total + (parseFloat(fund.installment_amount || 0) * memberCount)
+          return total + (parseFloat(fund.installment_per_member || 0) * memberCount)
         }, 0) || 0
 
         const monthlyProjectedOutflow = monthlyProjectedInflow * 0.8 // Assuming 80% of inflow goes to payouts

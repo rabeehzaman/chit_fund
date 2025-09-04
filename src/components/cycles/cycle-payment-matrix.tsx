@@ -40,7 +40,7 @@ interface Cycle {
 interface ChitFund {
   id: string
   name: string
-  installment_amount: string
+  installment_per_member: string
   duration_months: number
 }
 
@@ -60,7 +60,7 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
   const [matrixData, setMatrixData] = useState<Record<string, Record<string, CellData>>>({})
   const [selectedCell, setSelectedCell] = useState<{ memberId: string; cycleId: string } | null>(null)
 
-  const installmentAmount = parseFloat(chitFund.installment_amount)
+  const installmentAmount = parseFloat(chitFund.installment_per_member)
 
   useEffect(() => {
     // Build the payment matrix data
@@ -70,11 +70,10 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
       matrix[member.member.id] = {}
       
       cycles.forEach(cycle => {
-        const collectionEntry = cycle.collection_entries?.find(
+        const memberClosedEntries = (cycle.collection_entries || []).filter(
           entry => entry.member_id === member.member.id && entry.status === 'closed'
         )
-        
-        const amountPaid = collectionEntry ? parseFloat(collectionEntry.amount_collected) : 0
+        const amountPaid = memberClosedEntries.reduce((sum, entry) => sum + parseFloat(entry.amount_collected), 0)
         const isWinner = cycle.winner_member_id === member.member.id
         
         let status: CellData['status'] = 'unpaid'

@@ -70,7 +70,7 @@ export default async function ChitFundCyclesPage({ params }: PageProps) {
   const upcomingCycles = cycles?.filter(c => c.status === 'upcoming').length || 0
   
   // Calculate overall collection progress
-  const totalExpected = totalCycles * parseFloat(chitFund.installment_amount) * (members?.length || 0)
+  const totalExpected = totalCycles * parseFloat(chitFund.installment_per_member) * (members?.length || 0)
   const totalCollected = cycles?.reduce((sum, cycle) => {
     return sum + (cycle.collection_entries || []).reduce((cycleSum: number, entry: any) => {
       return entry.status === 'closed' ? cycleSum + parseFloat(entry.amount_collected) : cycleSum
@@ -222,7 +222,7 @@ export default async function ChitFundCyclesPage({ params }: PageProps) {
                     .filter((entry: any) => entry.status === 'closed')
                     .reduce((sum: number, entry: any) => sum + parseFloat(entry.amount_collected), 0)
                   
-                  const expectedAmount = parseFloat(chitFund.installment_amount) * (members?.length || 0)
+                  const expectedAmount = parseFloat(chitFund.installment_per_member) * (members?.length || 0)
                   const collectionPercentage = expectedAmount > 0 ? (collectedAmount / expectedAmount) * 100 : 0
                   
                   return (

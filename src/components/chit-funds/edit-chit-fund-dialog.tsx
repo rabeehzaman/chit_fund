@@ -16,23 +16,19 @@ import { Edit, CalendarDays, DollarSign, Hash, Users } from "lucide-react"
 
 const editChitFundSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters").max(100, "Name must be less than 100 characters"),
-  total_amount: z.coerce.number().min(1000, "Total amount must be at least ₹1,000").max(10000000, "Total amount must be less than ₹1,00,00,000"),
-  installment_amount: z.coerce.number().min(100, "Installment must be at least ₹100").max(1000000, "Installment must be less than ₹10,00,000"),
+  installment_per_member: z.coerce.number().min(100, "Installment per member must be at least ₹100").max(1000000, "Installment per member must be less than ₹10,00,000"),
   duration_months: z.coerce.number().min(1, "Duration must be at least 1 month").max(120, "Duration must be less than 120 months"),
+  max_members: z.coerce.number().min(1, "At least 1 member required").max(120, "Maximum 120 members allowed"),
   start_date: z.string().min(1, "Start date is required"),
   status: z.enum(['planning', 'active', 'completed', 'cancelled']),
 }).refine(
   (data) => {
-    // Basic validation: total_amount should be roughly equal to installment_amount * duration_months
-    // Allow some flexibility (±10%) for practical purposes
-    const expected = data.installment_amount * data.duration_months
-    const difference = Math.abs(data.total_amount - expected)
-    const tolerance = expected * 0.1 // 10% tolerance
-    return difference <= tolerance
+    // Validation: max_members should not exceed duration_months (traditional model)
+    return data.max_members <= data.duration_months
   },
   {
-    message: "Total amount should roughly equal installment amount × duration months",
-    path: ["total_amount"],
+    message: "Maximum members cannot exceed duration months (each member can win only once)",
+    path: ["max_members"],
   }
 )
 
@@ -44,7 +40,7 @@ interface EditChitFundDialogProps {
     id: string
     name: string
     total_amount: string
-    installment_amount: string
+    installment_per_member: string
     duration_months: number
     start_date: string
     status: string
@@ -62,8 +58,7 @@ export function EditChitFundDialog({ children, chitFund }: EditChitFundDialogPro
     resolver: zodResolver(editChitFundSchema),
     defaultValues: {
       name: chitFund.name,
-      total_amount: parseFloat(chitFund.total_amount),
-      installment_amount: parseFloat(chitFund.installment_amount),
+      installment_per_member: parseFloat(chitFund.installment_per_member),
       duration_months: chitFund.duration_months,
       start_date: chitFund.start_date,
       status: chitFund.status as any,
@@ -71,7 +66,7 @@ export function EditChitFundDialog({ children, chitFund }: EditChitFundDialogPro
   })
 
   // Watch values to provide real-time calculations
-  const watchedInstallment = form.watch("installment_amount")
+  const watchedInstallment = form.watch("installment_per_member")
   const watchedDuration = form.watch("duration_months")
   const suggestedTotal = watchedInstallment * watchedDuration
 
@@ -83,8 +78,7 @@ export function EditChitFundDialog({ children, chitFund }: EditChitFundDialogPro
         .from('chit_funds')
         .update({
           name: data.name,
-          total_amount: data.total_amount,
-          installment_amount: data.installment_amount,
+          installment_per_member: data.installment_per_member,
           duration_months: data.duration_months,
           start_date: data.start_date,
           status: data.status,
@@ -163,33 +157,11 @@ export function EditChitFundDialog({ children, chitFund }: EditChitFundDialogPro
 
             {/* Financial Details */}
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="total_amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      Total Amount (₹)
-                    </FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="100000"
-                        {...field}
-                        disabled={isLoading}
-                        min="1000"
-                        step="1000"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
 
               <FormField
                 control={form.control}
-                name="installment_amount"
+                name="installment_per_member"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">

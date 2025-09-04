@@ -70,7 +70,7 @@ export type Database = {
           created_by: string
           duration_months: number
           id: string
-          installment_amount: number
+          installment_per_member: number
           name: string
           start_date: string
           status: string | null
@@ -82,7 +82,7 @@ export type Database = {
           created_by: string
           duration_months: number
           id?: string
-          installment_amount: number
+          installment_per_member: number
           name: string
           start_date: string
           status?: string | null
@@ -94,7 +94,7 @@ export type Database = {
           created_by?: string
           duration_months?: number
           id?: string
-          installment_amount?: number
+          installment_per_member?: number
           name?: string
           start_date?: string
           status?: string | null

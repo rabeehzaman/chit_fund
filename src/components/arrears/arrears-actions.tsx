@@ -34,7 +34,7 @@ interface Member {
 interface ChitFund {
   id: string
   name: string
-  installment_amount: string | number
+  installment_per_member: string | number
 }
 
 interface ArrearsActionsProps {
@@ -268,6 +268,15 @@ function PaymentForm({ member, chitFund, arrearsAmount, onClose }: PaymentFormPr
   const supabase = createClient()
 
   const handleRecordPayment = async () => {
+    if (!paymentAmount || paymentAmount.trim() === '') {
+      toast({
+        title: "Error",
+        description: "Please enter a payment amount",
+        variant: "destructive"
+      })
+      return
+    }
+
     const amount = parseFloat(paymentAmount)
     if (isNaN(amount) || amount <= 0) {
       toast({
@@ -363,7 +372,10 @@ function PaymentForm({ member, chitFund, arrearsAmount, onClose }: PaymentFormPr
           <Input
             type="number"
             value={paymentAmount}
-            onChange={(e) => setPaymentAmount(e.target.value)}
+            onChange={(e) => {
+              const inputValue = e.target.value
+              setPaymentAmount(inputValue === '' ? '' : inputValue)
+            }}
             step="0.01"
             min="0"
             max={arrearsAmount}

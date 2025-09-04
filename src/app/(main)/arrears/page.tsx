@@ -17,60 +17,36 @@ interface ArrearsData {
   chit_fund_id: string
   chit_fund_name: string
   arrears_amount: number
-  days_overdue: number
+  advance_balance: number
   last_payment_date: string | null
-  expected_payments: number
-  actual_payments: number
-  installment_amount: number
+  installment_per_member: number
+  days_overdue: number
+  overdue_cycles: number
 }
 
 export default async function ArrearsPage() {
   const supabase = createClient()
 
   // Get all members with their arrears information
-  const { data: arrearsData } = await supabase
+  const { data: arrearsData, error } = await supabase
     .rpc('get_members_with_arrears')
-    .then(response => {
-      // If the function doesn't exist yet, create a mock query
-      if (response.error) {
-        return supabase
-          .from('member_balances')
-          .select(`
-            member_id,
-            chit_fund_id,
-            arrears_amount,
-            last_payment_date,
-            members!inner(
-              full_name,
-              phone
-            ),
-            chit_funds!inner(
-              name,
-              installment_amount,
-              start_date
-            )
-          `)
-          .gt('arrears_amount', 0)
-          .order('arrears_amount', { ascending: false })
-      }
-      return response
-    })
+
+  if (error) {
+    console.error('Error fetching arrears data:', error)
+  }
 
   // Calculate statistics
   const totalMembers = arrearsData?.length || 0
   const totalArrears = arrearsData?.reduce((sum: number, item: any) => 
     sum + parseFloat(item.arrears_amount || 0), 0) || 0
   
-  // Group by severity
+  // Group by severity (based on overdue cycles)
   const severeArrears = arrearsData?.filter((item: any) => 
-    parseFloat(item.arrears_amount || 0) >= parseFloat(item.chit_funds?.installment_amount || 0) * 2) || []
-  const moderateArrears = arrearsData?.filter((item: any) => {
-    const amount = parseFloat(item.arrears_amount || 0)
-    const installment = parseFloat(item.chit_funds?.installment_amount || 0)
-    return amount >= installment && amount < installment * 2
-  }) || []
+    parseInt(item.overdue_cycles || 0) >= 2) || []
+  const moderateArrears = arrearsData?.filter((item: any) => 
+    parseInt(item.overdue_cycles || 0) === 1) || []
   const minorArrears = arrearsData?.filter((item: any) => 
-    parseFloat(item.arrears_amount || 0) < parseFloat(item.chit_funds?.installment_amount || 0)) || []
+    parseInt(item.overdue_cycles || 0) < 1 && parseFloat(item.arrears_amount || 0) > 0) || []
 
   return (
     <div className="space-y-6">
@@ -121,7 +97,7 @@ export default async function ArrearsPage() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{severeArrears.length}</div>
             <p className="text-xs text-muted-foreground">
-              2+ installments behind
+              2+ cycles behind
             </p>
           </CardContent>
         </Card>
@@ -158,7 +134,7 @@ export default async function ArrearsPage() {
         <TabsContent value="severe">
           <ArrearsTable 
             data={severeArrears} 
-            title="Severe Arrears (2+ Installments Behind)"
+            title="Severe Arrears (2+ Cycles Behind)"
             severity="severe"
           />
         </TabsContent>
@@ -166,7 +142,7 @@ export default async function ArrearsPage() {
         <TabsContent value="moderate">
           <ArrearsTable 
             data={moderateArrears} 
-            title="Moderate Arrears (1-2 Installments Behind)"
+            title="Moderate Arrears (1 Cycle Behind)"
             severity="moderate"
           />
         </TabsContent>
@@ -174,7 +150,7 @@ export default async function ArrearsPage() {
         <TabsContent value="minor">
           <ArrearsTable 
             data={minorArrears} 
-            title="Minor Arrears (<1 Installment Behind)"
+            title="Minor Arrears (Partial Payments)"
             severity="minor"
           />
         </TabsContent>
@@ -224,59 +200,58 @@ function ArrearsTable({ data, title, severity }: ArrearsTableProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Member</TableHead>
-              <TableHead>Chit Fund</TableHead>
-              <TableHead>Arrears Amount</TableHead>
-              <TableHead>Severity</TableHead>
-              <TableHead>Last Payment</TableHead>
-              <TableHead>Days Overdue</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Chit Fund</TableHead>
+                <TableHead>Arrears Amount</TableHead>
+                <TableHead>Overdue Cycles</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead>Last Payment</TableHead>
+                <TableHead>Days Overdue</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
             {data.map((item: any) => {
               const arrearsAmount = parseFloat(item.arrears_amount || 0)
-              const installmentAmount = parseFloat(item.chit_funds?.installment_amount || item.installment_amount || 0)
-              const installmentsBehind = installmentAmount > 0 ? arrearsAmount / installmentAmount : 0
+              const installmentAmount = parseFloat(item.installment_per_member || 0)
+              const overdueCycles = parseInt(item.overdue_cycles || 0)
+              const daysOverdue = parseInt(item.days_overdue || 0)
               
               let severityBadge = 'outline'
               let severityText = 'Current'
               
-              if (installmentsBehind >= 2) {
+              if (overdueCycles >= 2) {
                 severityBadge = 'destructive'
                 severityText = 'Severe'
-              } else if (installmentsBehind >= 1) {
+              } else if (overdueCycles === 1) {
                 severityBadge = 'secondary'
                 severityText = 'Moderate'
-              } else if (installmentsBehind > 0) {
+              } else if (overdueCycles < 1 && arrearsAmount > 0) {
                 severityBadge = 'outline'
                 severityText = 'Minor'
               }
 
-              // Calculate days overdue (mock calculation for now)
               const lastPaymentDate = item.last_payment_date ? new Date(item.last_payment_date) : null
-              const daysOverdue = lastPaymentDate 
-                ? Math.floor((Date.now() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24))
-                : 0
 
               return (
                 <TableRow key={`${item.member_id}-${item.chit_fund_id}`}>
                   <TableCell>
                     <div className="space-y-1">
                       <div className="font-medium">
-                        {item.members?.full_name || item.member_name}
+                        {item.member_name}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {item.members?.phone || item.phone}
+                        {item.phone}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">
-                      {item.chit_funds?.name || item.chit_fund_name}
+                      {item.chit_fund_name}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -285,10 +260,20 @@ function ArrearsTable({ data, title, severity }: ArrearsTableProps) {
                         {formatCurrency(arrearsAmount)}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {installmentsBehind.toFixed(1)} installments behind
+                        {installmentAmount > 0 ? `₹${installmentAmount}/cycle` : ''}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="font-bold text-orange-600">
+                        {overdueCycles}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {overdueCycles === 1 ? 'cycle behind' : 'cycles behind'}
                       </div>
                       <Progress 
-                        value={Math.min(100, installmentsBehind * 50)} 
+                        value={Math.min(100, overdueCycles * 33)} 
                         className="h-2"
                       />
                     </div>
@@ -321,15 +306,15 @@ function ArrearsTable({ data, title, severity }: ArrearsTableProps) {
                   </TableCell>
                   <TableCell>
                     <ArrearsActions 
-                      member={item.members || { 
+                      member={{ 
                         full_name: item.member_name, 
                         phone: item.phone, 
                         id: item.member_id 
                       }}
-                      chitFund={item.chit_funds || {
+                      chitFund={{
                         name: item.chit_fund_name,
                         id: item.chit_fund_id,
-                        installment_amount: item.installment_amount
+                        installment_per_member: item.installment_per_member
                       }}
                       arrearsAmount={arrearsAmount}
                     />
@@ -337,8 +322,9 @@ function ArrearsTable({ data, title, severity }: ArrearsTableProps) {
                 </TableRow>
               )
             })}
-          </TableBody>
-        </Table>
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   )

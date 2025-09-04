@@ -16,7 +16,7 @@ import Link from 'next/link'
 type PendingCollection = Tables<'collection_entries'> & {
   chit_funds: {
     name: string
-    installment_amount: number
+    installment_per_member: number
   }
   cycles: {
     cycle_number: number
@@ -63,7 +63,7 @@ export default function PendingCollectionsPage() {
         .from('collection_entries')
         .select(`
           *,
-          chit_funds (name, installment_amount),
+          chit_funds (name, installment_per_member),
           cycles (cycle_number, cycle_date),
           members (full_name, phone),
           profiles (full_name, role)
@@ -400,7 +400,7 @@ export default function PendingCollectionsPage() {
                           <div>
                             <div className="font-medium">{entry.chit_funds?.name}</div>
                             <div className="text-sm text-gray-500">
-                              {formatCurrency(entry.chit_funds?.installment_amount || 0)} installment
+                              {formatCurrency(entry.chit_funds?.installment_per_member || 0)} installment
                             </div>
                           </div>
                         </TableCell>

@@ -67,7 +67,7 @@ export function CollectionTrendChart() {
           .from('chit_funds')
           .select(`
             id,
-            installment_amount,
+            installment_per_member,
             chit_fund_members!chit_fund_members_chit_fund_id_fkey(
               member_id
             )
@@ -79,7 +79,7 @@ export function CollectionTrendChart() {
         // Calculate monthly target
         const monthlyTarget = chitFunds?.reduce((total, fund: any) => {
           const memberCount = fund.chit_fund_members?.length || 0
-          return total + (parseFloat(fund.installment_amount || 0) * memberCount)
+          return total + (parseFloat(fund.installment_per_member || 0) * memberCount)
         }, 0) || 0
 
         // Group collections by month

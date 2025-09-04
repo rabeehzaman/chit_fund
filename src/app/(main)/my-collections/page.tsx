@@ -17,7 +17,7 @@ import Link from 'next/link'
 type CollectionEntry = Tables<'collection_entries'> & {
   chit_funds: {
     name: string
-    installment_amount: number
+    installment_per_member: number
   }
   cycles: {
     cycle_number: number
@@ -80,7 +80,7 @@ export default function MyCollectionsPage() {
         .from('collection_entries')
         .select(`
           *,
-          chit_funds (name, installment_amount),
+          chit_funds (name, installment_per_member),
           cycles (cycle_number, cycle_date),
           members (full_name, phone),
           closing_sessions (status, session_date),
@@ -387,7 +387,7 @@ export default function MyCollectionsPage() {
                           <div>
                             <div className="font-medium">{entry.chit_funds?.name}</div>
                             <div className="text-sm text-gray-500">
-                              {formatCurrency(entry.chit_funds?.installment_amount || 0)} installment
+                              {formatCurrency(entry.chit_funds?.installment_per_member || 0)} installment
                             </div>
                           </div>
                         </TableCell>

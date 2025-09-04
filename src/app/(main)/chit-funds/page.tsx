@@ -19,27 +19,18 @@ export default async function ChitFundsPage() {
   // Fetch real data from Supabase (authentication removed, RLS disabled)
   const supabase = createClient()
 
-  // Fetch data in parallel for better performance
-  const [
-    { data: chitFunds },
-    { count: totalMembers }
-  ] = await Promise.all([
-    supabase
-      .from('chit_funds')
-      .select(`
-        *,
-        chit_fund_members(count)
-      `)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('members')
-      .select('*', { count: 'exact', head: true })
-  ])
+  // Fetch chit funds with dynamic calculations
+  const { data: chitFunds } = await supabase
+    .rpc('get_all_chit_funds_with_stats')
+  
+  const { count: totalMembers } = await supabase
+    .from('members')
+    .select('*', { count: 'exact', head: true })
 
-  // Calculate stats
+  // Calculate stats using dynamic values
   const totalFunds = chitFunds?.length || 0
-  const activeFunds = chitFunds?.filter(fund => fund.status === 'active').length || 0
-  const totalValue = chitFunds?.reduce((sum, fund) => sum + parseFloat(fund.total_amount || '0'), 0) || 0
+  const activeFunds = chitFunds?.filter((fund: any) => fund.status === 'active').length || 0
+  const totalDynamicValue = chitFunds?.reduce((sum: number, fund: any) => sum + parseFloat(fund.current_fund_value || '0'), 0) || 0
 
   const mockProfile = {
     role: 'admin',
@@ -82,8 +73,8 @@ export default async function ChitFundsPage() {
                 <CardTitle className="text-sm font-medium">Total Value</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(totalValue)}</div>
-                <p className="text-xs text-muted-foreground">All funds combined</p>
+                <div className="text-2xl font-bold">{formatCurrency(totalDynamicValue)}</div>
+                <p className="text-xs text-muted-foreground">Current dynamic value</p>
               </CardContent>
             </Card>
           </div>
@@ -114,10 +105,10 @@ export default async function ChitFundsPage() {
                   <AnimatedTableHeader>
                     <AnimatedTableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Total Amount</TableHead>
-                      <TableHead>Installment</TableHead>
+                      <TableHead>Current Fund Value</TableHead>
+                      <TableHead>Per Member</TableHead>
                       <TableHead>Duration</TableHead>
-                      <TableHead>Members</TableHead>
+                      <TableHead>Subscription</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </AnimatedTableRow>
@@ -126,10 +117,26 @@ export default async function ChitFundsPage() {
                     {chitFunds.map((fund: any) => (
                       <AnimatedTableRow key={fund.id} interactive>
                         <AnimatedTableCell className="font-medium">{fund.name}</AnimatedTableCell>
-                        <AnimatedTableCell>{formatCurrency(parseFloat(fund.total_amount))}</AnimatedTableCell>
-                        <AnimatedTableCell>{formatCurrency(parseFloat(fund.installment_amount))}</AnimatedTableCell>
+                        <AnimatedTableCell>
+                          <div className="space-y-1">
+                            <div className="font-medium">{formatCurrency(parseFloat(fund.current_fund_value || '0'))}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {fund.current_members}/{fund.max_members} members
+                            </div>
+                          </div>
+                        </AnimatedTableCell>
+                        <AnimatedTableCell>{formatCurrency(parseFloat(fund.installment_per_member))}</AnimatedTableCell>
                         <AnimatedTableCell>{fund.duration_months} months</AnimatedTableCell>
-                        <AnimatedTableCell>{fund.chit_fund_members?.length || 0}</AnimatedTableCell>
+                        <AnimatedTableCell>
+                          <div className="space-y-1">
+                            <div className="font-medium">
+                              {fund.current_members}/{fund.max_members}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {fund.subscription_percentage}% filled
+                            </div>
+                          </div>
+                        </AnimatedTableCell>
                         <AnimatedTableCell>
                           <Badge
                             variant={

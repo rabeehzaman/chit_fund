@@ -121,7 +121,7 @@ export default async function HomePage() {
     ?.filter(fund => fund.status === 'active')
     ?.reduce((sum, fund) => {
       const memberCount = memberFundData?.filter(mf => mf.chit_fund_id === fund.id).length || 0
-      return sum + (parseFloat(fund.installment_amount || '0') * memberCount)
+      return sum + (parseFloat(fund.installment_per_member || '0') * memberCount)
     }, 0) || 0
   
   // Calculate collection rate

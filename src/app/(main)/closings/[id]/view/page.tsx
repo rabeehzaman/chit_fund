@@ -44,7 +44,7 @@ type ClosingSession = Tables<'closing_sessions'> & {
     }
     chit_funds: {
       name: string
-      installment_amount: number
+      installment_per_member: number
     }
     cycles: {
       cycle_number: number
@@ -84,7 +84,7 @@ export default function ViewClosingSessionPage() {
             payment_method,
             notes,
             members (full_name, phone),
-            chit_funds (name, installment_amount),
+            chit_funds (name, installment_per_member),
             cycles (cycle_number, cycle_date)
           )
         `)
@@ -337,7 +337,7 @@ export default function ViewClosingSessionPage() {
                         <div className="flex flex-col">
                           <span className="text-sm font-medium">{entry.chit_funds.name}</span>
                           <span className="text-xs text-gray-500">
-                            Installment: {formatCurrency(entry.chit_funds.installment_amount)}
+                            Installment: {formatCurrency(entry.chit_funds.installment_per_member)}
                           </span>
                         </div>
                       </TableCell>

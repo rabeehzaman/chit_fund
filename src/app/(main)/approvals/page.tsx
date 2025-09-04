@@ -231,6 +231,22 @@ export default function ApprovalsPage() {
           console.error('Error updating collection entries:', collectionError)
           // Continue anyway, as the main approval was successful
         }
+
+        try {
+          // Recompute balances for all chit funds affected in this session
+          const { data: entryFunds } = await supabase
+            .from('collection_entries')
+            .select('chit_fund_id')
+            .eq('closing_session_id', selectedSession.id)
+            .eq('status', 'closed')
+
+          const uniqueFundIds = Array.from(new Set((entryFunds || []).map((e: any) => e.chit_fund_id)))
+          for (const fundId of uniqueFundIds) {
+            await supabase.rpc('update_all_member_balances', { p_chit_fund_id: fundId })
+          }
+        } catch (e) {
+          console.warn('Balance recompute after approval encountered an issue:', e)
+        }
       }
 
       toast({

@@ -4,9 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Progress } from '@/components/ui/progress'
-import { AdvanceActions } from '@/components/advances/advance-actions'
 import { formatCurrency } from '@/lib/utils'
-import { TrendingUp, Users, DollarSign, Calendar, CheckCircle } from 'lucide-react'
+import { TrendingUp, Users, DollarSign, CheckCircle } from 'lucide-react'
 
 export default async function AdvancesPage() {
   const supabase = createClient()
@@ -123,7 +122,7 @@ export default async function AdvancesPage() {
               <TableBody>
                 {advancesData.map((item: any) => {
                   const advanceBalance = parseFloat(item.advance_balance || 0)
-                  const installmentAmount = parseFloat(item.installment_amount || 0)
+                  const installmentAmount = parseFloat(item.installment_per_member || 0)
                   const cyclesPrepaid = item.cycles_prepaid || 0
                   const partialPayment = advanceBalance % installmentAmount
                   const coveragePercentage = installmentAmount > 0 
@@ -181,20 +180,9 @@ export default async function AdvancesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <AdvanceActions 
-                          member={{
-                            id: item.member_id,
-                            full_name: item.member_name,
-                            phone: item.phone
-                          }}
-                          chitFund={{
-                            id: item.chit_fund_id,
-                            name: item.chit_fund_name,
-                            installment_amount: item.installment_amount
-                          }}
-                          advanceBalance={advanceBalance}
-                          cyclesPrepaid={cyclesPrepaid}
-                        />
+                        <Badge variant="secondary" className="text-xs">
+                          Auto-applied to cycles
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   )

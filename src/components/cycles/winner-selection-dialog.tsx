@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,7 @@ interface Cycle {
 interface ChitFund {
   id: string
   name: string
-  installment_amount: string
+  installment_per_member: string
   duration_months: number
 }
 
@@ -106,20 +106,47 @@ export function WinnerSelectionDialog({
     }
   }
 
-  const calculatePayoutAmount = () => {
-    // Calculate total collected for this cycle
-    const totalCollected = (cycle.collection_entries || [])
-      .filter((entry: any) => entry.status === 'closed')
-      .reduce((sum: number, entry: any) => sum + parseFloat(entry.amount_collected), 0)
-    
-    // Winner gets the full collected amount (no commission deduction)
-    const commission = 0
-    const payoutAmount = totalCollected
-    
-    return {
-      totalCollected,
-      commission,
-      payoutAmount: Math.max(0, payoutAmount)
+  const calculatePayoutAmount = async () => {
+    try {
+      // Use dynamic calculation function
+      const { data } = await supabase
+        .rpc('calculate_cycle_payout_amount', {
+          p_cycle_id: cycle.id,
+          p_commission_percentage: 0.0 // No commission for now
+        })
+      
+      if (data && data[0]) {
+        const result = data[0]
+        return {
+          totalCollected: parseFloat(result.total_collected || '0'),
+          commission: parseFloat(result.commission_amount || '0'),
+          payoutAmount: parseFloat(result.net_payout_amount || '0')
+        }
+      }
+      
+      // Fallback to old calculation if function fails
+      const totalCollected = (cycle.collection_entries || [])
+        .filter((entry: any) => entry.status === 'closed')
+        .reduce((sum: number, entry: any) => sum + parseFloat(entry.amount_collected), 0)
+      
+      return {
+        totalCollected,
+        commission: 0,
+        payoutAmount: Math.max(0, totalCollected)
+      }
+    } catch (error) {
+      console.error('Error calculating payout amount:', error)
+      
+      // Fallback to old calculation
+      const totalCollected = (cycle.collection_entries || [])
+        .filter((entry: any) => entry.status === 'closed')
+        .reduce((sum: number, entry: any) => sum + parseFloat(entry.amount_collected), 0)
+      
+      return {
+        totalCollected,
+        commission: 0,
+        payoutAmount: Math.max(0, totalCollected)
+      }
     }
   }
 
@@ -135,8 +162,39 @@ export function WinnerSelectionDialog({
 
     setIsSubmitting(true)
     try {
-      const { totalCollected, commission, payoutAmount } = calculatePayoutAmount()
+      const { totalCollected, commission, payoutAmount } = await calculatePayoutAmount()
       
+      // Start a database transaction by using RPC function
+      const selectedMember = eligibleMembers.find(m => m.member_id === selectedWinnerId)
+      if (!selectedMember) {
+        throw new Error('Selected member not found')
+      }
+
+      // Generate receipt number first
+      const { data: receiptData, error: receiptError } = await supabase
+        .rpc('generate_receipt_number')
+      
+      if (receiptError) throw receiptError
+      
+      // Get system admin ID
+      const { data: systemAdminId, error: adminError } = await supabase
+        .rpc('get_system_admin_id')
+      
+      if (adminError) throw adminError
+
+      // Check if cycle is already completed
+      const { data: cycleCheck, error: checkError } = await supabase
+        .from('cycles')
+        .select('status, winner_member_id')
+        .eq('id', cycle.id)
+        .single()
+      
+      if (checkError) throw checkError
+      
+      if (cycleCheck.status === 'completed') {
+        throw new Error('This cycle has already been completed')
+      }
+
       // Update cycle with winner and payout amount
       const { error: cycleError } = await supabase
         .from('cycles')
@@ -150,33 +208,41 @@ export function WinnerSelectionDialog({
 
       if (cycleError) throw cycleError
 
-      // Create payout record
-      const selectedMember = eligibleMembers.find(m => m.member_id === selectedWinnerId)
-      if (selectedMember) {
-        const { error: payoutError } = await supabase
-          .from('payouts')
-          .insert({
-            cycle_id: cycle.id,
-            chit_fund_id: chitFund.id,
-            winner_member_id: selectedWinnerId,
-            total_collected: totalCollected,
-            commission_amount: commission,
-            commission_percentage: 0.0,
-            payout_amount: payoutAmount,
-            net_payout_amount: payoutAmount,
-            payout_date: new Date().toISOString().split('T')[0],
-            notes: notes || `Winner selected for Cycle ${cycle.cycle_number}`,
-            created_by: '00000000-0000-0000-0000-000000000000', // System admin UUID
-            status: 'pending'
-          })
+      // Create payout record with generated receipt number
+      const { error: payoutError } = await supabase
+        .from('payouts')
+        .insert({
+          cycle_id: cycle.id,
+          chit_fund_id: chitFund.id,
+          winner_member_id: selectedWinnerId,
+          total_collected: totalCollected,
+          commission_amount: commission,
+          commission_percentage: 0.0,
+          payout_amount: payoutAmount,
+          net_payout_amount: payoutAmount,
+          receipt_number: receiptData || 'PAY-ERROR-0000',
+          payout_date: new Date().toISOString().split('T')[0],
+          notes: notes || `Winner selected for Cycle ${cycle.cycle_number}`,
+          created_by: systemAdminId,
+          status: 'pending'
+        })
 
-        if (payoutError) throw payoutError
-      }
+      if (payoutError) throw payoutError
 
       // Update member balances for all members in this chit fund
-      await supabase.rpc('update_all_member_balances', { 
+      const { error: balanceError } = await supabase.rpc('update_all_member_balances', { 
         p_chit_fund_id: chitFund.id 
       })
+      
+      if (balanceError) {
+        console.error('Error updating member balances:', balanceError)
+        // Continue anyway since the main winner selection operation succeeded
+        toast({
+          title: "Warning",
+          description: "Winner selected successfully, but there was an issue updating member balances.",
+          variant: "default"
+        })
+      }
 
       toast({
         title: "Success",
@@ -187,7 +253,24 @@ export function WinnerSelectionDialog({
       router.refresh()
       
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      console.error('Raw error object:', error)
+      console.error('Error type:', typeof error)
+      console.error('Error constructor:', error?.constructor?.name)
+      console.error('Error keys:', error ? Object.keys(error) : 'null/undefined')
+      
+      let errorMessage = 'Unknown error occurred'
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String(error.message)
+      } else if (error && typeof error === 'object' && 'error' in error) {
+        errorMessage = String(error.error)
+      } else if (error && typeof error === 'string') {
+        errorMessage = error
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error)
+      }
       
       console.error('Error selecting winner:', {
         message: errorMessage,
@@ -205,8 +288,17 @@ export function WinnerSelectionDialog({
     }
   }
 
-  const { totalCollected, commission, payoutAmount } = calculatePayoutAmount()
+  const [payoutData, setPayoutData] = useState({ totalCollected: 0, commission: 0, payoutAmount: 0 })
   const selectedMember = eligibleMembers.find(m => m.member_id === selectedWinnerId)
+
+  // Calculate payout amount when component loads
+  useEffect(() => {
+    if (cycle?.id) {
+      calculatePayoutAmount().then(data => {
+        setPayoutData(data)
+      })
+    }
+  }, [cycle?.id])
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -231,20 +323,34 @@ export function WinnerSelectionDialog({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatCurrency(totalCollected)}
+                  <div className="text-xl font-bold text-green-600">
+                    {formatCurrency(payoutData.totalCollected)}
                   </div>
-                  <div className="text-sm text-muted-foreground">Total Collected</div>
+                  <div className="text-sm text-muted-foreground">Actually Collected</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(payoutAmount)}
+                  <div className="text-xl font-bold text-gray-500">
+                    {formatCurrency(parseFloat(chitFund.installment_per_member) * members.length)}
                   </div>
-                  <div className="text-sm text-muted-foreground">Winner Payout (Full Amount)</div>
+                  <div className="text-sm text-muted-foreground">Expected ({members.length} members)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-bold text-blue-600">
+                    {formatCurrency(payoutData.payoutAmount)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Winner Payout</div>
                 </div>
               </div>
+              {payoutData.totalCollected < parseFloat(chitFund.installment_per_member) * members.length && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="text-sm text-yellow-800 flex items-center">
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Incomplete collection: Only {formatCurrency(payoutData.totalCollected)} collected out of {formatCurrency(parseFloat(chitFund.installment_per_member) * members.length)} expected
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -345,7 +451,7 @@ export function WinnerSelectionDialog({
                     <div className="flex justify-between border-t pt-2">
                       <span className="text-muted-foreground">Payout Amount:</span>
                       <span className="font-bold text-green-600">
-                        {formatCurrency(payoutAmount)}
+                        {formatCurrency(payoutData.payoutAmount)}
                       </span>
                     </div>
                   </div>

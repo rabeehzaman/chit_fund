@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,8 +17,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
 import { Save, CheckCircle, AlertCircle } from 'lucide-react'
 import { ensureSystemProfile, getAnyProfileId, SYSTEM_PROFILE_ID } from '@/lib/system'
-import { calculatePaymentLimits, validatePaymentAmount, getPaymentMessage } from '@/lib/payment-utils'
-import type { PaymentLimits } from '@/lib/payment-utils'
+import { calculatePaymentLimits, validatePaymentAmount, getPaymentMessage, getCyclePaymentStatus, validatePaymentAttempt, getNextPayableCycle } from '@/lib/payment-utils'
+import type { PaymentLimits, CyclePaymentStatus, PaymentValidation, NextPayableCycle } from '@/lib/payment-utils'
 
 // Dynamic validation schema creator
 const createCollectionFormSchema = (paymentLimits?: PaymentLimits) => {
@@ -46,9 +46,7 @@ const createCollectionFormSchema = (paymentLimits?: PaymentLimits) => {
   })
 }
 
-const collectionFormSchema = createCollectionFormSchema()
-
-type CollectionFormValues = z.infer<typeof collectionFormSchema>
+type CollectionFormValues = z.infer<ReturnType<typeof createCollectionFormSchema>>
 
 export default function CollectPage() {
   const router = useRouter()
@@ -58,9 +56,11 @@ export default function CollectPage() {
   const [selectedCycle, setSelectedCycle] = useState<string | null>(null)
   const [selectedMember, setSelectedMember] = useState<string | null>(null)
   const [paymentLimits, setPaymentLimits] = useState<PaymentLimits | null>(null)
+  const [cyclePaymentStatus, setCyclePaymentStatus] = useState<CyclePaymentStatus | null>(null)
+  const [nextPayableCycle, setNextPayableCycle] = useState<NextPayableCycle | null>(null)
 
   const form = useForm<CollectionFormValues>({
-    resolver: zodResolver(collectionFormSchema),
+    resolver: zodResolver(createCollectionFormSchema(paymentLimits || undefined)),
     defaultValues: {
       collectorId: '',
       chitFundId: '',
@@ -92,48 +92,85 @@ export default function CollectPage() {
     fetchCollectors()
   }, [])
 
-  // Fetch payment limits when member and chit fund are selected
+  // Fetch cycle payment status when member, cycle, and chit fund are selected
   useEffect(() => {
-    const fetchPaymentLimits = async () => {
-      if (!selectedMember || !selectedChitFund) {
+    const fetchCyclePaymentStatus = async () => {
+      if (!selectedMember || !selectedCycle || !selectedChitFund) {
+        setCyclePaymentStatus(null)
         setPaymentLimits(null)
+        setNextPayableCycle(null)
         return
       }
 
       try {
-        const limits = await calculatePaymentLimits(selectedMember, selectedChitFund)
-        setPaymentLimits(limits)
+        // Get cycle payment status
+        const status = await getCyclePaymentStatus(selectedMember, selectedCycle)
+        setCyclePaymentStatus(status)
         
-        // Update form validation with new limits
-        if (limits) {
-          const newSchema = createCollectionFormSchema(limits)
-          form.clearErrors('amountCollected')
-          
-          // Re-validate current amount if exists
-          const currentAmount = form.getValues('amountCollected')
-          if (currentAmount > 0) {
-            const validation = validatePaymentAmount(currentAmount, limits)
-            if (!validation.isValid) {
-              form.setError('amountCollected', { 
-                type: 'manual', 
-                message: validation.error || 'Invalid payment amount' 
-              })
-            }
+        // If cycle is fully paid, suggest next cycle
+        if (status?.isFullyPaid) {
+          const nextCycle = await getNextPayableCycle(selectedMember, selectedChitFund, selectedCycle)
+          setNextPayableCycle(nextCycle)
+        } else {
+          setNextPayableCycle(null)
+        }
+
+        // Set payment limits based on cycle status
+        if (status && !status.isFullyPaid) {
+          const limits: PaymentLimits = {
+            minimum: 1,
+            maximum: status.remainingAmount,
+            recommended: Math.min(status.installmentAmount, status.remainingAmount),
+            totalObligation: status.installmentAmount,
+            totalPaid: status.amountPaid,
+            remainingObligation: status.remainingAmount,
+            installmentAmount: status.installmentAmount,
+            cyclesRemaining: 1,
+            totalCycles: 1
           }
+          setPaymentLimits(limits)
+        } else {
+          setPaymentLimits(null)
+        }
+        
+        // Re-validate current amount
+        const currentAmount = form.getValues('amountCollected')
+        if (currentAmount > 0) {
+          form.clearErrors('amountCollected')
+          form.trigger('amountCollected')
         }
       } catch (error) {
-        console.error('Error fetching payment limits:', error)
+        console.error('Error fetching cycle payment status:', error)
+        setCyclePaymentStatus(null)
         setPaymentLimits(null)
+        setNextPayableCycle(null)
       }
     }
 
-    fetchPaymentLimits()
-  }, [selectedMember, selectedChitFund, form])
+    fetchCyclePaymentStatus()
+  }, [selectedMember, selectedCycle, selectedChitFund, form])
 
   const onSubmit = async (data: CollectionFormValues) => {
     setIsLoading(true)
 
     try {
+      // CRITICAL SECURITY: Server-side validation to prevent overpayment and duplicates
+      const validation = await validatePaymentAttempt(
+        data.memberId, 
+        data.cycleId, 
+        data.amountCollected
+      )
+      
+      if (!validation.isValid) {
+        toast({
+          variant: "destructive", 
+          title: "Payment Validation Failed",
+          description: validation.errorMessage
+        })
+        setIsLoading(false)
+        return
+      }
+
       const supabase = createClient()
       
       const { error } = await supabase
@@ -171,7 +208,7 @@ export default function CollectPage() {
         chitFundId: '',
         cycleId: '',
         memberId: '',
-        amountCollected: 0,
+        amountCollected: undefined,
         paymentMethod: 'cash',
         collectionDate: new Date().toISOString().split('T')[0],
         notes: ''
@@ -182,6 +219,8 @@ export default function CollectPage() {
       setSelectedCycle(null)
       setSelectedMember(null)
       setPaymentLimits(null)
+      setCyclePaymentStatus(null)
+      setNextPayableCycle(null)
 
     } catch (error) {
       console.error('Unexpected error:', error)
@@ -255,6 +294,8 @@ export default function CollectPage() {
                                 setSelectedCycle(null)
                                 setSelectedMember(null)
                                 setPaymentLimits(null)
+                                setCyclePaymentStatus(null)
+                                setNextPayableCycle(null)
                               }}
                             />
                           </FormControl>
@@ -273,13 +314,14 @@ export default function CollectPage() {
                           <FormControl>
                             <CycleSelector
                               chitFundId={selectedChitFund}
+                              memberId={selectedMember}
                               value={field.value}
                               onValueChange={(value) => {
                                 field.onChange(value)
                                 setSelectedCycle(value)
-                                // Reset member selection when cycle changes
-                                form.setValue('memberId', '')
-                                setSelectedMember(null)
+                                // Clear payment status when cycle changes (will be refetched by useEffect)
+                                setCyclePaymentStatus(null)
+                                setNextPayableCycle(null)
                                 setPaymentLimits(null)
                               }}
                             />
@@ -311,6 +353,26 @@ export default function CollectPage() {
                       )}
                     />
 
+                    {/* Payment Status Alert */}
+                    {cyclePaymentStatus?.isFullyPaid && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+                        <div className="flex items-center">
+                          <AlertCircle className="h-5 w-5 text-amber-600 mr-2" />
+                          <div>
+                            <h3 className="text-sm font-medium text-amber-800">
+                              Cycle Already Fully Paid
+                            </h3>
+                            <p className="text-sm text-amber-700 mt-1">
+                              This cycle has been fully paid (₹{cyclePaymentStatus.amountPaid.toFixed(2)} / ₹{cyclePaymentStatus.installmentAmount.toFixed(2)}).
+                              {nextPayableCycle && (
+                                <> Consider selecting <strong>Cycle {nextPayableCycle.cycleNumber}</strong> for the next payment.</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Amount and Payment Details */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -330,9 +392,9 @@ export default function CollectPage() {
                             <FormItem>
                               <FormLabel className="flex items-center justify-between">
                                 <span>Amount Collected *</span>
-                                {paymentLimits && (
+                                {paymentLimits && !cyclePaymentStatus?.isFullyPaid && (
                                   <span className="text-xs text-muted-foreground">
-                                    Min: ₹{paymentLimits.minimum.toFixed(2)} | Max: ₹{paymentLimits.maximum.toFixed(2)}
+                                    Max: ₹{paymentLimits.maximum.toFixed(2)} | Paid: ₹{cyclePaymentStatus?.amountPaid.toFixed(2) || '0.00'}
                                   </span>
                                 )}
                               </FormLabel>
@@ -340,24 +402,22 @@ export default function CollectPage() {
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  placeholder={paymentLimits ? paymentLimits.installmentAmount.toFixed(2) : "0.00"}
+                                  placeholder={cyclePaymentStatus?.isFullyPaid ? "Cycle fully paid" : paymentLimits ? paymentLimits.maximum.toFixed(2) : "0.00"}
                                   className={getInputColorClass()}
+                                  disabled={cyclePaymentStatus?.isFullyPaid}
                                   {...field}
+                                  onFocus={(e) => {
+                                    // Auto-select all content when focused for better UX
+                                    e.target.select()
+                                  }}
                                   onChange={(e) => {
-                                    const value = parseFloat(e.target.value) || 0
+                                    const inputValue = e.target.value
+                                    const value = inputValue === '' ? undefined : parseFloat(inputValue) || 0
                                     field.onChange(value)
-                                    
-                                    // Real-time validation
-                                    if (paymentLimits && value > 0) {
-                                      const validation = validatePaymentAmount(value, paymentLimits)
-                                      if (!validation.isValid) {
-                                        form.setError('amountCollected', {
-                                          type: 'manual',
-                                          message: validation.error || 'Invalid payment amount'
-                                        })
-                                      } else {
-                                        form.clearErrors('amountCollected')
-                                      }
+
+                                    // Trigger validation through the resolver
+                                    if (paymentLimits && value && value > 0) {
+                                      form.trigger('amountCollected')
                                     }
                                   }}
                                 />
@@ -442,11 +502,13 @@ export default function CollectPage() {
                     <div className="flex justify-end space-x-4">
                       <Button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || cyclePaymentStatus?.isFullyPaid}
                         className="min-w-32"
                       >
                         {isLoading ? (
                           'Recording...'
+                        ) : cyclePaymentStatus?.isFullyPaid ? (
+                          'Cycle Fully Paid'
                         ) : (
                           <>
                             <Save className="h-4 w-4 mr-2" />
