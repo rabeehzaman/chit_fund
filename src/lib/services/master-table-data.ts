@@ -616,7 +616,7 @@ export async function fetchFundMembers(fundId: string): Promise<FundMemberData[]
       
       // Find related data for this member
       const memberCollections = collectionEntries?.filter(ce => ce.member_id === membership.member_id) || []
-      const memberBalance = memberBalances?.find(mb => mb.member_id === membership.member_id) || {}
+      const memberBalance = memberBalances?.find(mb => mb.member_id === membership.member_id) || { arrears_amount: '0', advance_balance: '0', last_payment_date: null }
       
       const installment = parseFloat(fund?.installment_per_member || '0')
       const totalDue = installment * (fund?.duration_months || 0)
