@@ -5,20 +5,20 @@ import { cn } from "@/lib/utils"
 import { springs, conditionalAnimation } from "@/lib/animations"
 
 const cardVariants = cva(
-  "rounded-xl border bg-card text-card-foreground shadow transform-gpu transition-all duration-200 ease-out",
+  "rounded-xl border bg-card text-card-foreground transform-gpu transition-all duration-200 ease-out",
   {
     variants: {
       variant: {
-        default: "shadow hover:shadow-lg",
-        interactive: "cursor-pointer hover:-translate-y-1 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]",
-        flat: "shadow-none border-0 bg-transparent",
-        elevated: "shadow-lg hover:shadow-xl"
+        default: "border-border",
+        interactive: "cursor-pointer hover:-translate-y-1 hover:border-foreground/30 hover:scale-[1.02] active:scale-[0.98]",
+        flat: "border-0 bg-transparent",
+        elevated: "border-foreground/20 hover:border-foreground/40"
       },
       animation: {
         none: "",
-        subtle: "hover:shadow-md hover:-translate-y-0.5",
-        lift: "hover:-translate-y-1 hover:shadow-lg",
-        scale: "hover:scale-[1.02] hover:shadow-lg"
+        subtle: "hover:border-foreground/20 hover:-translate-y-0.5",
+        lift: "hover:-translate-y-1 hover:border-foreground/30",
+        scale: "hover:scale-[1.02] hover:border-foreground/30"
       }
     },
     defaultVariants: {

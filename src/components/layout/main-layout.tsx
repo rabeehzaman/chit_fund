@@ -7,6 +7,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 
 interface MainLayoutProps {
@@ -23,7 +24,7 @@ function FloatingTrigger() {
   
   return (
     <div className="absolute top-4 left-4 z-50">
-      <SidebarTrigger className="bg-white shadow-md hover:shadow-lg border" />
+      <SidebarTrigger className="bg-background border-border shadow-md hover:shadow-lg border" />
     </div>
   )
 }
@@ -35,6 +36,9 @@ export function MainLayout({ children }: MainLayoutProps) {
       <AppSidebar />
       <SidebarInset>
         <FloatingTrigger />
+        <div className="absolute top-4 right-4 z-50">
+          <ThemeToggle />
+        </div>
         {/* Main Content */}
         <main className="flex flex-1 flex-col p-6">
           {children}
