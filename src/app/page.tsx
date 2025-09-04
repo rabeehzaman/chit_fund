@@ -28,6 +28,7 @@ import { CollectorPerformanceChart } from '@/components/charts/collector-perform
 import { ArrearsAgingChart } from '@/components/charts/arrears-aging-chart'
 import { CashFlowChart } from '@/components/charts/cash-flow-chart'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
+import { MasterTableWrapper } from '@/components/dashboard/master-table-wrapper'
 import { MainLayout } from '@/components/layout/main-layout'
 import { ClientTimeBadge } from '@/components/ui/client-time-badge'
 
@@ -192,6 +193,9 @@ export default async function HomePage() {
             <ClientTimeBadge />
           </div>
         </div>
+
+        {/* Master Table Section - Moved to Top */}
+        <MasterTableWrapper />
 
         {/* Primary KPI Cards - Enhanced with Animations */}
         <AnimatedStatsGrid>

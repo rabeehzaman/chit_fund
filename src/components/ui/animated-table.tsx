@@ -41,7 +41,7 @@ export function AnimatedTableBody({
   return (
     <TableBody className={className} {...props}>
       {React.Children.map(children, (child, index) =>
-        React.isValidElement(child) 
+        React.isValidElement(child) && child.type !== React.Fragment
           ? React.cloneElement(child as any, { 
               animationIndex: index, 
               staggerDelay 
