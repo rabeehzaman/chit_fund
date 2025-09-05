@@ -28,7 +28,11 @@ const userSchema = z.object({
 
 type UserForm = z.infer<typeof userSchema>
 
-export function AddUserDialog() {
+interface AddUserDialogProps {
+  onSuccess?: () => void
+}
+
+export function AddUserDialog({ onSuccess }: AddUserDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -80,7 +84,13 @@ export function AddUserDialog() {
       
       form.reset()
       setIsOpen(false)
-      router.refresh()
+      
+      // Call the success callback if provided, otherwise fallback to router.refresh()
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        router.refresh()
+      }
     } catch (error) {
       console.error("Error creating user:", error)
       toast({

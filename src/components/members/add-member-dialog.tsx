@@ -349,7 +349,7 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
                                   </SelectItem>
                                 ))
                               ) : (
-                                <SelectItem value="" disabled>
+                                <SelectItem value="no-funds" disabled>
                                   No chit funds available
                                 </SelectItem>
                               )}

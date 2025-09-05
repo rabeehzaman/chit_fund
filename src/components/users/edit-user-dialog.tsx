@@ -34,9 +34,10 @@ interface EditUserDialogProps {
     role: string
     address?: string | null
   }
+  onSuccess?: () => void
 }
 
-export function EditUserDialog({ children, user }: EditUserDialogProps) {
+export function EditUserDialog({ children, user, onSuccess }: EditUserDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const router = useRouter()
@@ -94,7 +95,13 @@ export function EditUserDialog({ children, user }: EditUserDialogProps) {
       })
 
       setOpen(false)
-      router.refresh()
+      
+      // Call the success callback if provided, otherwise fallback to router.refresh()
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        router.refresh()
+      }
     } catch (error) {
       console.error('Unexpected error:', error)
       toast({

@@ -12,9 +12,10 @@ interface ToggleUserStatusButtonProps {
     full_name: string
     is_active: boolean
   }
+  onSuccess?: () => void
 }
 
-export function ToggleUserStatusButton({ user }: ToggleUserStatusButtonProps) {
+export function ToggleUserStatusButton({ user, onSuccess }: ToggleUserStatusButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -49,7 +50,12 @@ export function ToggleUserStatusButton({ user }: ToggleUserStatusButtonProps) {
         description: `${user.full_name} has been ${newStatus ? 'activated' : 'deactivated'}.`,
       })
 
-      router.refresh()
+      // Call the success callback if provided, otherwise fallback to router.refresh()
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        router.refresh()
+      }
     } catch (error) {
       console.error('Unexpected error:', error)
       toast({

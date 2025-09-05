@@ -1,3 +1,6 @@
+"use client"
+
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -6,18 +9,77 @@ import { Badge } from '@/components/ui/badge'
 import { AddUserDialog } from '@/components/users/add-user-dialog'
 import { EditUserDialog } from '@/components/users/edit-user-dialog'
 import { ToggleUserStatusButton } from '@/components/users/toggle-user-status-button'
+import { Loader2 } from 'lucide-react'
 
-export default async function UsersManagementPage() {
+interface User {
+  id: string
+  full_name: string
+  email?: string | null
+  phone?: string | null
+  role: string
+  address?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at?: string | null
+}
+
+export default function UsersManagementPage() {
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
-  
-  // Fetch all users from profiles table
-  const { data: users, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false })
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching users:', error)
+        setError(error.message || 'Failed to fetch users')
+        return
+      }
+
+      setUsers(data || [])
+    } catch (err) {
+      console.error('Unexpected error:', err)
+      setError('An unexpected error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2 text-gray-600">Loading users...</span>
+      </div>
+    )
+  }
 
   if (error) {
-    console.error('Error fetching users:', error)
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error: {error}</p>
+            <Button onClick={fetchUsers} variant="outline">
+              Try Again
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -27,7 +89,7 @@ export default async function UsersManagementPage() {
             <h2 className="text-xl font-semibold text-gray-900">System Users</h2>
             <p className="text-gray-600">Manage administrators and collectors</p>
           </div>
-          <AddUserDialog />
+          <AddUserDialog onSuccess={fetchUsers} />
         </div>
 
         {/* Users Table */}
@@ -82,12 +144,12 @@ export default async function UsersManagementPage() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex space-x-2">
-                            <EditUserDialog user={user}>
+                            <EditUserDialog user={user} onSuccess={fetchUsers}>
                               <Button variant="outline" size="sm">
                                 Edit
                               </Button>
                             </EditUserDialog>
-                            <ToggleUserStatusButton user={user} />
+                            <ToggleUserStatusButton user={user} onSuccess={fetchUsers} />
                           </div>
                         </td>
                       </tr>
@@ -98,7 +160,7 @@ export default async function UsersManagementPage() {
             ) : (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-4">No users found in the system.</p>
-                <AddUserDialog />
+                <AddUserDialog onSuccess={fetchUsers} />
               </div>
             )}
           </CardContent>
