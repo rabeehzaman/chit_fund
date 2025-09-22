@@ -56,17 +56,29 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
     localStorage.setItem('masterTableOpen', JSON.stringify(isOpen))
   }, [isOpen])
 
-  // Fetch fresh data function
+  // Fetch fresh data function with cache busting
   const fetchFreshData = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch('/api/hierarchical-master-data')
+
+      // Add cache-busting timestamp and headers
+      const timestamp = Date.now()
+      const response = await fetch(`/api/hierarchical-master-data?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
+
       if (!response.ok) {
         throw new Error('Failed to fetch data')
       }
+
       const freshData = await response.json()
       setData(freshData)
       setLastRefresh(new Date())
+
     } catch (error) {
       console.error('Error fetching fresh data:', error)
     } finally {
@@ -74,10 +86,8 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
     }
   }
 
-  // Real-time subscriptions
+  // Real-time subscriptions - Always active for automatic refresh
   useEffect(() => {
-    if (!isOpen) return
-
     // Subscribe to changes in the underlying tables that affect the view
     const channel = supabase
       .channel('master-data-changes')
@@ -86,6 +96,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'collection_entries'
       }, () => {
+        console.log('Real-time: collection_entries changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -93,6 +104,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'chit_funds'
       }, () => {
+        console.log('Real-time: chit_funds changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -100,6 +112,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'members'
       }, () => {
+        console.log('Real-time: members changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -107,6 +120,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'chit_fund_members'
       }, () => {
+        console.log('Real-time: chit_fund_members changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -114,6 +128,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'member_balances'
       }, () => {
+        console.log('Real-time: member_balances changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -121,6 +136,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'cycles'
       }, () => {
+        console.log('Real-time: cycles changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -128,6 +144,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'payouts'
       }, () => {
+        console.log('Real-time: payouts changed, refreshing data...')
         fetchFreshData()
       })
       .on('postgres_changes', {
@@ -135,26 +152,34 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
         schema: 'public',
         table: 'closing_sessions'
       }, () => {
+        console.log('Real-time: closing_sessions changed, refreshing data...')
         fetchFreshData()
       })
       .subscribe()
 
+    console.log('Real-time subscriptions activated for hierarchical master data')
+
     return () => {
       supabase.removeChannel(channel)
+      console.log('Real-time subscriptions deactivated')
     }
-  }, [isOpen, supabase])
+  }, [supabase])
 
-  // Auto-refresh every 2 minutes when open (backup to real-time)
+  // Auto-refresh as backup to real-time subscriptions
   useEffect(() => {
-    if (isOpen) {
-      const interval = setInterval(() => {
-        fetchFreshData()
-      }, 120000) // 2 minutes
-      return () => clearInterval(interval)
-    }
+    // More frequent refresh when open, less frequent when closed
+    const intervalTime = isOpen ? 120000 : 300000 // 2 minutes when open, 5 minutes when closed
+
+    const interval = setInterval(() => {
+      console.log(`Auto-refresh triggered (${isOpen ? 'open' : 'closed'} mode)`)
+      fetchFreshData()
+    }, intervalTime)
+
+    return () => clearInterval(interval)
   }, [isOpen])
 
   const handleRefresh = () => {
+    console.log('Manual refresh triggered by user')
     fetchFreshData()
   }
 
