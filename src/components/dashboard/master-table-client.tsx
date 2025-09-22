@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,7 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const [data, setData] = useState(initialData)
+  const supabase = createClient()
 
   // Persist open state in localStorage
   useEffect(() => {
@@ -54,22 +56,106 @@ export function MasterTableClient({ initialData }: MasterTableClientProps) {
     localStorage.setItem('masterTableOpen', JSON.stringify(isOpen))
   }, [isOpen])
 
-  // Auto-refresh every 30 seconds when open
+  // Fetch fresh data function
+  const fetchFreshData = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/hierarchical-master-data')
+      if (!response.ok) {
+        throw new Error('Failed to fetch data')
+      }
+      const freshData = await response.json()
+      setData(freshData)
+      setLastRefresh(new Date())
+    } catch (error) {
+      console.error('Error fetching fresh data:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Real-time subscriptions
+  useEffect(() => {
+    if (!isOpen) return
+
+    // Subscribe to changes in the underlying tables that affect the view
+    const channel = supabase
+      .channel('master-data-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'collection_entries'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chit_funds'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'members'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chit_fund_members'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'member_balances'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'cycles'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'payouts'
+      }, () => {
+        fetchFreshData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'closing_sessions'
+      }, () => {
+        fetchFreshData()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [isOpen, supabase])
+
+  // Auto-refresh every 2 minutes when open (backup to real-time)
   useEffect(() => {
     if (isOpen) {
       const interval = setInterval(() => {
-        setLastRefresh(new Date())
-        // Trigger data refresh here
-      }, 30000)
+        fetchFreshData()
+      }, 120000) // 2 minutes
       return () => clearInterval(interval)
     }
   }, [isOpen])
 
   const handleRefresh = () => {
-    setIsLoading(true)
-    setLastRefresh(new Date())
-    // Implement data refresh
-    setTimeout(() => setIsLoading(false), 1000) // Mock loading
+    fetchFreshData()
   }
 
   const handleExportCSV = () => {

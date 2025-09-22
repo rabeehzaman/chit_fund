@@ -116,6 +116,7 @@ export default function CreateClosingSessionPage() {
         `)
         .eq('collector_id', collectorId)
         .eq('status', 'pending_close')
+        .is('closing_session_id', null)
         .order('collection_date', { ascending: false })
 
       if (!error && data) {
@@ -159,6 +160,32 @@ export default function CreateClosingSessionPage() {
     try {
       const supabase = createClient()
       
+      // Validate that none of the selected collections are already assigned to a closing session
+      const { data: existingAssignments, error: checkError } = await supabase
+        .from('collection_entries')
+        .select('id, closing_session_id')
+        .in('id', selectedCollections)
+        .not('closing_session_id', 'is', null)
+
+      if (checkError) {
+        console.error('Error checking existing assignments:', checkError)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to validate collections. Please try again."
+        })
+        return
+      }
+
+      if (existingAssignments && existingAssignments.length > 0) {
+        toast({
+          variant: "destructive",
+          title: "Collections already assigned",
+          description: `${existingAssignments.length} selected collections are already part of another closing session. Please refresh the page and try again.`
+        })
+        return
+      }
+      
       const { data: sessionData, error } = await supabase
         .from('closing_sessions')
         .insert({
@@ -184,20 +211,37 @@ export default function CreateClosingSessionPage() {
         return
       }
 
-      // Update collection entries with closing session ID
+      // Update collection entries with closing session ID and status
       const { error: updateError } = await supabase
         .from('collection_entries')
-        .update({ closing_session_id: sessionData.id })
+        .update({ 
+          closing_session_id: sessionData.id,
+          status: isDraft ? 'pending_close' : 'pending_approval'
+        })
         .in('id', selectedCollections)
 
       if (updateError) {
         console.error('Error updating collection entries:', updateError)
+        
+        // Check if it's a constraint violation (collections already assigned)
+        const isConstraintViolation = updateError.message?.includes('collection_entries_no_duplicate_assignments') ||
+                                     updateError.code === '23505'
+        
+        if (isConstraintViolation) {
+          toast({
+            variant: "destructive",
+            title: "Collections already assigned",
+            description: "Some selected collections are already part of another closing session. Please refresh the page and try again."
+          })
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to link collections to closing session. Please try again."
+          })
+        }
+        
         // TODO: Should rollback the closing session creation
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to link collections to closing session."
-        })
         return
       }
 

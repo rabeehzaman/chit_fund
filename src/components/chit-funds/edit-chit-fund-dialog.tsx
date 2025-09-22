@@ -17,20 +17,10 @@ import { Edit, CalendarDays, DollarSign, Hash, Users } from "lucide-react"
 const editChitFundSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters").max(100, "Name must be less than 100 characters"),
   installment_per_member: z.coerce.number().min(100, "Installment per member must be at least ₹100").max(1000000, "Installment per member must be less than ₹10,00,000"),
-  duration_months: z.coerce.number().min(1, "Duration must be at least 1 month").max(120, "Duration must be less than 120 months"),
-  max_members: z.coerce.number().min(1, "At least 1 member required").max(120, "Maximum 120 members allowed"),
+  duration_months: z.coerce.number().min(1, "Duration must be at least 1 month"),
   start_date: z.string().min(1, "Start date is required"),
   status: z.enum(['planning', 'active', 'completed', 'cancelled']),
-}).refine(
-  (data) => {
-    // Validation: max_members should not exceed duration_months (traditional model)
-    return data.max_members <= data.duration_months
-  },
-  {
-    message: "Maximum members cannot exceed duration months (each member can win only once)",
-    path: ["max_members"],
-  }
-)
+})
 
 type EditChitFundForm = z.infer<typeof editChitFundSchema>
 
@@ -202,7 +192,6 @@ export function EditChitFundDialog({ children, chitFund }: EditChitFundDialogPro
                         {...field}
                         disabled={isLoading}
                         min="1"
-                        max="120"
                       />
                     </FormControl>
                     <FormMessage />

@@ -46,7 +46,7 @@ export async function getAnyProfileId(supabase: any): Promise<string | null> {
       .from('profiles')
       .select('id')
       .limit(1)
-      .maybeSingle?.()
+      .maybeSingle()
 
     if (!error && data?.id) return (data as any).id
   } catch (_) {}

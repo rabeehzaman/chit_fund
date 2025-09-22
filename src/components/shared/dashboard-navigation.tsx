@@ -33,6 +33,13 @@ const navigationItems: NavigationItem[] = [
     ]
   },
   {
+    label: 'Cashbook',
+    children: [
+      { label: 'Cashbook Ledger', href: '/cashbook' },
+      { label: 'Cash Summary', href: '/cashbook/summary' }
+    ]
+  },
+  {
     label: 'Chit Funds',
     href: '/chit-funds'
   },

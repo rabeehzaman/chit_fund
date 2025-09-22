@@ -7,7 +7,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 
 interface MainLayoutProps {
@@ -36,9 +35,6 @@ export function MainLayout({ children }: MainLayoutProps) {
       <AppSidebar />
       <SidebarInset>
         <FloatingTrigger />
-        <div className="absolute top-4 right-4 z-50">
-          <ThemeToggle />
-        </div>
         {/* Main Content */}
         <main className="flex flex-1 flex-col p-6">
           {children}

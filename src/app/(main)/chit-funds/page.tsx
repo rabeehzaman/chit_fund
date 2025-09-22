@@ -107,7 +107,7 @@ export default async function ChitFundsPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Current Fund Value</TableHead>
                       <TableHead>Per Member</TableHead>
-                      <TableHead>Duration</TableHead>
+                      <TableHead>Duration / Cycles</TableHead>
                       <TableHead>Subscription</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
@@ -121,19 +121,26 @@ export default async function ChitFundsPage() {
                           <div className="space-y-1">
                             <div className="font-medium">{formatCurrency(parseFloat(fund.current_fund_value || '0'))}</div>
                             <div className="text-xs text-muted-foreground">
-                              {fund.current_members}/{fund.max_members} members
+                              {fund.current_members} members
                             </div>
                           </div>
                         </AnimatedTableCell>
                         <AnimatedTableCell>{formatCurrency(parseFloat(fund.installment_per_member))}</AnimatedTableCell>
-                        <AnimatedTableCell>{fund.duration_months} months</AnimatedTableCell>
+                        <AnimatedTableCell>
+                          <div className="space-y-1">
+                            <div className="font-medium">{fund.duration_months} months</div>
+                            <div className="text-xs text-muted-foreground">
+                              {fund.total_cycles} cycles (= members)
+                            </div>
+                          </div>
+                        </AnimatedTableCell>
                         <AnimatedTableCell>
                           <div className="space-y-1">
                             <div className="font-medium">
-                              {fund.current_members}/{fund.max_members}
+                              {fund.current_members} members
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {fund.subscription_percentage}% filled
+                              No limit - growing fund
                             </div>
                           </div>
                         </AnimatedTableCell>

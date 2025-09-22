@@ -38,6 +38,7 @@ export function ThemeToggle() {
       size="icon"
       onClick={toggleTheme}
       aria-label="Toggle theme"
+      className="text-sidebar-foreground hover:text-sidebar-foreground/80 hover:bg-sidebar-accent"
     >
       {theme === 'light' ? (
         <Moon className="h-4 w-4" />

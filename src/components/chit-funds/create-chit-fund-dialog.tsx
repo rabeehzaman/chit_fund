@@ -11,9 +11,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
-import { CalendarDays, DollarSign, Hash, Users } from "lucide-react"
+import { CalendarDays, DollarSign, Hash, Users, Clock } from "lucide-react"
+import { CycleIntervalType } from "@/lib/supabase/types"
+import { INTERVAL_TYPE_OPTIONS, COMMON_INTERVALS, validateCycleConfiguration, generateCycles, getIntervalDescription } from "@/lib/utils/cycle-utils"
 
 const createChitFundSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters").max(100, "Name must be less than 100 characters"),
@@ -23,18 +26,25 @@ const createChitFundSchema = z.object({
   }, {
     message: "Installment per member must be between ₹100 and ₹10,00,000"
   }),
-  duration_months: z.coerce.number().min(1, "Duration must be at least 1 month").max(120, "Duration must be less than 120 months"),
-  max_members: z.coerce.number().min(1, "At least 1 member required").max(120, "Maximum 120 members allowed"),
+  duration_months: z.coerce.number().min(1, "Duration must be at least 1 month"),
+  total_cycles: z.coerce.number().min(1, "At least 1 cycle required"),
+  cycle_interval_type: z.enum(["weekly", "monthly", "custom_days"]),
+  cycle_interval_value: z.coerce.number().min(1, "Interval value must be at least 1").max(365, "Interval value too large"),
   start_date: z.string().min(1, "Start date is required"),
   description: z.string().optional(),
 }).refine(
   (data) => {
-    // Validation: max_members should not exceed duration_months (traditional model)
-    return data.max_members <= data.duration_months
+    // Validate cycle configuration
+    const validation = validateCycleConfiguration(
+      data.cycle_interval_type,
+      data.cycle_interval_value,
+      data.total_cycles
+    )
+    return validation.isValid
   },
   {
-    message: "Maximum members cannot exceed duration months (each member can win only once)",
-    path: ["max_members"],
+    message: "Invalid cycle configuration",
+    path: ["cycle_interval_value"],
   }
 )
 
@@ -56,8 +66,10 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
     defaultValues: {
       name: "",
       installment_per_member: undefined as any,
-      duration_months: 12,
-      max_members: 12,
+      duration_months: 12, // Keep for backward compatibility
+      total_cycles: 12,
+      cycle_interval_type: "monthly",
+      cycle_interval_value: 1,
       start_date: "",
       description: "",
     },
@@ -65,19 +77,25 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
 
   // Watch values to provide real-time calculations
   const watchedInstallment = form.watch("installment_per_member")
-  const watchedDuration = form.watch("duration_months")
-  const watchedMaxMembers = form.watch("max_members")
+  const watchedTotalCycles = form.watch("total_cycles")
+  const watchedIntervalType = form.watch("cycle_interval_type")
+  const watchedIntervalValue = form.watch("cycle_interval_value")
 
-  // Dynamic calculations (handle undefined values)
-  const maxPossibleMonthlyCollection = (watchedInstallment || 0) * watchedMaxMembers
-  const maxPossibleFundValue = maxPossibleMonthlyCollection * watchedDuration
-
-  // Auto-update max_members to match duration (traditional model)
+  // Auto-update duration_months for backward compatibility
   React.useEffect(() => {
-    if (watchedDuration && watchedDuration !== watchedMaxMembers) {
-      form.setValue('max_members', watchedDuration)
+    if (watchedIntervalType === 'monthly' && watchedIntervalValue === 1) {
+      form.setValue('duration_months', watchedTotalCycles)
+    } else {
+      // Calculate approximate months for non-monthly intervals
+      let approximateMonths = watchedTotalCycles
+      if (watchedIntervalType === 'weekly') {
+        approximateMonths = Math.round((watchedTotalCycles * watchedIntervalValue * 7) / 30.44)
+      } else if (watchedIntervalType === 'custom_days') {
+        approximateMonths = Math.round((watchedTotalCycles * watchedIntervalValue) / 30.44)
+      }
+      form.setValue('duration_months', Math.max(1, approximateMonths))
     }
-  }, [watchedDuration, watchedMaxMembers, form])
+  }, [watchedTotalCycles, watchedIntervalType, watchedIntervalValue, form])
 
   async function onSubmit(data: CreateChitFundForm) {
     setIsLoading(true)
@@ -91,10 +109,13 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
         .from('chit_funds')
         .insert({
           name: data.name,
-          total_amount: maxPossibleFundValue, // Keep for backward compatibility, but will be calculated dynamically
+          total_amount: (watchedInstallment || 0) * watchedTotalCycles, // Base calculation - will grow with members
           installment_per_member: data.installment_per_member,
-          duration_months: data.duration_months,
-          max_members: data.max_members,
+          duration_months: data.duration_months, // Keep for backward compatibility
+          total_cycles: data.total_cycles,
+          cycle_interval_type: data.cycle_interval_type,
+          cycle_interval_value: data.cycle_interval_value,
+          max_members: null, // No limit - fund grows with members
           start_date: data.start_date,
           status: 'planning',
           ...(creatorId ? { created_by: creatorId } : {}),
@@ -112,18 +133,12 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
         return
       }
 
-      // Generate cycles for the chit fund
-      const cycles = Array.from({ length: data.duration_months }, (_, index) => {
-        const cycleDate = new Date(data.start_date)
-        cycleDate.setMonth(cycleDate.getMonth() + index)
-        
-        return {
-          chit_fund_id: chitFund.id,
-          cycle_number: index + 1,
-          cycle_date: cycleDate.toISOString().split('T')[0], // YYYY-MM-DD format
-          total_amount: 0,
-          status: index === 0 ? 'active' : 'upcoming'
-        }
+      // Generate cycles for the chit fund using the new flexible interval logic
+      const cycles = generateCycles(chitFund.id, {
+        startDate: data.start_date,
+        totalCycles: data.total_cycles,
+        intervalType: data.cycle_interval_type,
+        intervalValue: data.cycle_interval_value,
       })
 
       const { error: cyclesError } = await supabase
@@ -142,7 +157,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
 
       toast({
         title: "Success",
-        description: `Chit fund "${data.name}" created successfully with ${data.duration_months} cycles!`,
+        description: `Chit fund "${data.name}" created successfully with ${data.total_cycles} cycles (${getIntervalDescription(data.cycle_interval_type, data.cycle_interval_value, data.total_cycles)})!`,
       })
 
       form.reset()
@@ -170,7 +185,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
         <DialogHeader>
           <DialogTitle>Create New Chit Fund</DialogTitle>
           <DialogDescription>
-            Set up a new chit fund with members and monthly cycles.
+            Set up a new chit fund with flexible cycle intervals (weekly, monthly, or custom days).
           </DialogDescription>
         </DialogHeader>
         
@@ -224,76 +239,19 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Financial Details</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="installment_per_member"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        Installment Per Member (₹)
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="1000"
-                          disabled={isLoading}
-                          {...field}
-                          onFocus={(e) => {
-                            // Auto-select all content when focused for better UX
-                            e.target.select()
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="duration_months"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <CalendarDays className="h-4 w-4" />
-                        Duration (Months)
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={120}
-                          disabled={isLoading}
-                          {...field}
-                          onFocus={(e) => {
-                            // Auto-select all content when focused for better UX
-                            e.target.select()
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
               <FormField
                 control={form.control}
-                name="max_members"
+                name="installment_per_member"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Maximum Members Allowed
+                      <DollarSign className="h-4 w-4" />
+                      Installment Per Member (₹)
                     </FormLabel>
                     <FormControl>
                       <Input
                         type="number"
-                        placeholder="12"
-                        min={1}
-                        max={120}
+                        placeholder="1000"
                         disabled={isLoading}
                         {...field}
                         onFocus={(e) => {
@@ -302,32 +260,151 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
                         }}
                       />
                     </FormControl>
-                    <p className="text-sm text-muted-foreground">
-                      Each member can win only once. Traditionally equals duration months.
-                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              {/* Dynamic Calculation Display */}
-              {maxPossibleFundValue > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-3">Dynamic Fund Calculations</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-blue-700 font-medium">Max Monthly Collection:</span>
-                      <p className="text-blue-900">₹{maxPossibleMonthlyCollection.toLocaleString()}</p>
-                      <p className="text-xs text-blue-600">{watchedMaxMembers} members × ₹{watchedInstallment}</p>
-                    </div>
-                    <div>
-                      <span className="text-blue-700 font-medium">Max Fund Value:</span>
-                      <p className="text-blue-900">₹{maxPossibleFundValue.toLocaleString()}</p>
-                      <p className="text-xs text-blue-600">If all {watchedMaxMembers} members join</p>
+              {/* Cycle Configuration */}
+              <div className="space-y-4">
+                <h4 className="text-md font-medium">Cycle Configuration</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="total_cycles"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Hash className="h-4 w-4" />
+                          Total Cycles
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={1}
+                            disabled={isLoading}
+                            {...field}
+                            onFocus={(e) => e.target.select()}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cycle_interval_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          Interval Type
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select interval type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {INTERVAL_TYPE_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                <div>
+                                  <div className="font-medium">{option.label}</div>
+                                  <div className="text-xs text-muted-foreground">{option.description}</div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cycle_interval_value"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4" />
+                          Interval Value
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={365}
+                            disabled={isLoading}
+                            {...field}
+                            onFocus={(e) => e.target.select()}
+                            placeholder={
+                              watchedIntervalType === 'weekly' ? 'Weeks' :
+                              watchedIntervalType === 'monthly' ? 'Months' : 'Days'
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Common interval presets */}
+                {watchedIntervalType && COMMON_INTERVALS[watchedIntervalType] && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-blue-900 mb-2">Common presets:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {COMMON_INTERVALS[watchedIntervalType].map((preset) => (
+                        <Button
+                          key={preset.value}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-1 px-2 text-xs bg-white hover:bg-blue-100"
+                          onClick={() => form.setValue('cycle_interval_value', preset.value)}
+                          disabled={isLoading}
+                        >
+                          <div className="text-left">
+                            <div className="font-medium">{preset.label}</div>
+                            <div className="text-[10px] text-muted-foreground">{preset.description}</div>
+                          </div>
+                        </Button>
+                      ))}
                     </div>
                   </div>
-                  <div className="mt-3 text-xs text-blue-600">
-                    💡 Actual fund value will grow as members join the chit fund
+                )}
+
+                {/* Cycle preview */}
+                {watchedTotalCycles > 0 && watchedIntervalType && watchedIntervalValue > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-green-900 mb-1">Cycle Schedule Preview:</p>
+                    <p className="text-sm text-green-800">
+                      {getIntervalDescription(watchedIntervalType, watchedIntervalValue, watchedTotalCycles)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+
+              {/* Dynamic Fund Growth Info */}
+              {watchedInstallment && watchedTotalCycles && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 mb-3">Fund Growth Model</h4>
+                  <div className="text-sm text-green-800 space-y-2">
+                    <div>
+                      <span className="font-medium">Per Member Per Cycle:</span> ₹{(watchedInstallment || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      <span className="font-medium">Total Cycles:</span> {watchedTotalCycles} cycles
+                    </div>
+                    <div className="text-xs text-green-600 mt-3">
+                      🌱 <strong>No member limit!</strong> Fund value will grow automatically as more members join.
+                      <br />💰 Each member contributes ₹{(watchedInstallment || 0).toLocaleString()} × {watchedTotalCycles} = ₹{((watchedInstallment || 0) * watchedTotalCycles).toLocaleString()} total
+                    </div>
                   </div>
                 </div>
               )}
@@ -351,7 +428,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
                       />
                     </FormControl>
                     <p className="text-sm text-muted-foreground">
-                      The first cycle will begin on this date
+                      The first cycle will begin on this date. Subsequent cycles will follow your configured interval.
                     </p>
                     <FormMessage />
                   </FormItem>

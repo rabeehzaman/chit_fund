@@ -16,7 +16,9 @@ import {
   FileText,
   Plus,
   ClipboardList,
-  CheckCircle2
+  CheckCircle2,
+  BookOpen,
+  BarChart3
 } from 'lucide-react'
 import {
   Sidebar,
@@ -33,6 +35,7 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 interface NavigationItem {
   label: string
@@ -95,6 +98,22 @@ const navigationItems: NavigationItem[] = [
         label: 'Approval Queue', 
         href: '/approvals',
         icon: CheckCircle2
+      }
+    ]
+  },
+  {
+    label: 'Cashbook',
+    icon: BookOpen,
+    children: [
+      { 
+        label: 'Cashbook Ledger', 
+        href: '/cashbook',
+        icon: BookOpen
+      },
+      { 
+        label: 'Cash Summary', 
+        href: '/cashbook/summary',
+        icon: BarChart3
       }
     ]
   },
@@ -351,6 +370,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </AnimatedSidebarMenuItem>
                 )
               })}
+              
+              {/* Theme Toggle as a menu item */}
+              <AnimatedSidebarMenuItem index={navigationItems.length + 1}>
+                <div className="flex items-center justify-center p-2 mt-4 border-t border-sidebar-border">
+                  <ThemeToggle />
+                </div>
+              </AnimatedSidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

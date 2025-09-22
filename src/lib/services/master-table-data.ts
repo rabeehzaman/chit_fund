@@ -475,84 +475,39 @@ export interface MemberCollectionData {
   fundId: string
 }
 
-// Hierarchical data fetching functions
+// Hierarchical data fetching functions using database views
 export async function fetchFundsWithStats(): Promise<FundWithStats[]> {
   const supabase = createClient()
 
   try {
     const { data, error } = await supabase
-      .from('chit_funds')
-      .select(`
-        id,
-        name,
-        start_date,
-        duration_months,
-        installment_per_member,
-        total_amount,
-        status,
-        chit_fund_members (
-          status,
-          member_id,
-          members (full_name)
-        ),
-        collection_entries (
-          amount_collected,
-          status
-        ),
-        member_balances (
-          arrears_amount,
-          advance_balance
-        ),
-        cycles (
-          cycle_number,
-          cycle_date,
-          status
-        )
-      `)
+      .from('hierarchical_master_data_view')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching funds with stats:', error)
+      console.error('Error fetching funds with stats from view:', error)
       return []
     }
 
-    return (data || []).map((fund: any) => {
-      const activeMembers = fund.chit_fund_members?.filter((m: any) => m.status === 'active') || []
-      const memberCount = activeMembers.length
-      
-      const totalCollected = fund.collection_entries?.reduce((sum: number, entry: any) => {
-        return sum + (entry.status === 'closed' ? parseFloat(entry.amount_collected || '0') : 0)
-      }, 0) || 0
-
-      const installment = parseFloat(fund.installment_per_member || '0')
-      const totalValue = installment * memberCount * fund.duration_months
-      const collectionProgress = totalValue > 0 ? (totalCollected / totalValue * 100) : 0
-
-      const arrearsCount = fund.member_balances?.filter((mb: any) => parseFloat(mb.arrears_amount || '0') > 0).length || 0
-      const advancesCount = fund.member_balances?.filter((mb: any) => parseFloat(mb.advance_balance || '0') > 0).length || 0
-
-      const nextCycle = fund.cycles?.find((c: any) => c.status === 'active')
-      const recentCollections = fund.collection_entries?.filter((c: any) => c.status === 'closed').slice(-3)
-
-      return {
-        id: fund.id,
-        name: fund.name,
-        startDate: fund.start_date,
-        duration: fund.duration_months,
-        members: memberCount,
-        installment,
-        totalValue,
-        collected: totalCollected,
-        remaining: totalValue - totalCollected,
-        currentWinner: null, // Will be populated from cycles if needed
-        status: fund.status,
-        collectionProgress: Math.round(collectionProgress * 100) / 100,
-        arrearsCount,
-        advancesCount,
-        nextCycleDate: nextCycle?.cycle_date || null,
-        recentActivity: recentCollections?.length > 0 ? 'Recent payments received' : 'No recent activity'
-      }
-    })
+    return (data || []).map((fund: any) => ({
+      id: fund.id,
+      name: fund.name,
+      startDate: fund.start_date,
+      duration: fund.duration_months,
+      members: fund.active_member_count,
+      installment: parseFloat(fund.installment_per_member || '0'),
+      totalValue: parseFloat(fund.total_value || '0'),
+      collected: parseFloat(fund.total_collected || '0'),
+      remaining: parseFloat(fund.remaining_amount || '0'),
+      currentWinner: fund.current_winner_name || null,
+      status: fund.status,
+      collectionProgress: parseFloat(fund.collection_progress_percentage || '0'),
+      arrearsCount: fund.members_in_arrears || 0,
+      advancesCount: fund.members_with_advances || 0,
+      nextCycleDate: fund.next_cycle_date || null,
+      recentActivity: fund.recent_activity || 'No recent activity'
+    }))
   } catch (error) {
     console.error('Error fetching funds with stats:', error)
     return []
@@ -563,93 +518,31 @@ export async function fetchFundMembers(fundId: string): Promise<FundMemberData[]
   const supabase = createClient()
 
   try {
-    // First get the fund members
-    const { data: fundMembers, error: membersError } = await supabase
-      .from('chit_fund_members')
-      .select(`
-        member_id,
-        status,
-        chit_fund_id,
-        members (
-          id,
-          full_name,
-          phone
-        ),
-        chit_funds (
-          installment_per_member,
-          duration_months
-        )
-      `)
+    const { data, error } = await supabase
+      .from('fund_member_details_view')
+      .select('*')
       .eq('chit_fund_id', fundId)
-      .eq('status', 'active')
+      .order('full_name')
 
-    if (membersError) {
-      console.error('Error fetching fund members:', membersError)
+    if (error) {
+      console.error('Error fetching fund members from view:', error)
       return []
     }
 
-    if (!fundMembers || fundMembers.length === 0) {
-      return []
-    }
-
-    // Get member IDs for additional queries
-    const memberIds = fundMembers.map(fm => fm.member_id)
-
-    // Get collection entries for these members in this fund
-    const { data: collectionEntries } = await supabase
-      .from('collection_entries')
-      .select('member_id, amount_collected, collection_date, status')
-      .eq('chit_fund_id', fundId)
-      .in('member_id', memberIds)
-
-    // Get member balances for these members in this fund  
-    const { data: memberBalances } = await supabase
-      .from('member_balances')
-      .select('member_id, arrears_amount, advance_balance, last_payment_date')
-      .eq('chit_fund_id', fundId)
-      .in('member_id', memberIds)
-
-    // Map the data by combining all sources
-    return fundMembers.map((membership: any) => {
-      const member = membership.members
-      const fund = membership.chit_funds
-      
-      // Find related data for this member
-      const memberCollections = collectionEntries?.filter(ce => ce.member_id === membership.member_id) || []
-      const memberBalance = memberBalances?.find(mb => mb.member_id === membership.member_id) || { arrears_amount: '0', advance_balance: '0', last_payment_date: null }
-      
-      const installment = parseFloat(fund?.installment_per_member || '0')
-      const totalDue = installment * (fund?.duration_months || 0)
-      
-      const totalPaid = memberCollections.reduce((sum: number, entry: any) => {
-        return sum + (entry.status === 'closed' ? parseFloat(entry.amount_collected || '0') : 0)
-      }, 0)
-
-      const arrears = parseFloat(memberBalance.arrears_amount || '0')
-      const advances = parseFloat(memberBalance.advance_balance || '0')
-      
-      const paymentsCount = memberCollections.filter((c: any) => c.status === 'closed').length
-      const lastPaymentEntry = memberCollections
-        .filter((c: any) => c.status === 'closed')
-        .sort((a: any, b: any) => new Date(b.collection_date).getTime() - new Date(a.collection_date).getTime())[0]
-      
-      const lastPayment = lastPaymentEntry?.collection_date || memberBalance.last_payment_date || null
-
-      return {
-        id: member?.id || membership.member_id,
-        name: member?.full_name || 'Unknown',
-        phone: member?.phone || null,
-        totalDue,
-        totalPaid,
-        arrears,
-        advances,
-        lastPayment,
-        paymentsCount,
-        status: membership.status,
-        fundId: fundId,
-        nextDueAmount: Math.max(0, installment - advances)
-      }
-    })
+    return (data || []).map((member: any) => ({
+      id: member.id,
+      name: member.full_name,
+      phone: member.phone,
+      totalDue: parseFloat(member.total_due_amount || '0'),
+      totalPaid: parseFloat(member.total_paid || '0'),
+      arrears: parseFloat(member.arrears_amount || '0'),
+      advances: parseFloat(member.advance_balance || '0'),
+      lastPayment: member.last_payment_date,
+      paymentsCount: member.completed_payments || 0,
+      status: member.membership_status,
+      fundId: fundId,
+      nextDueAmount: parseFloat(member.next_due_amount || '0')
+    }))
   } catch (error) {
     console.error('Error fetching fund members:', error)
     return []
@@ -661,43 +554,27 @@ export async function fetchMemberCollections(fundId: string, memberId: string): 
 
   try {
     const { data, error } = await supabase
-      .from('collection_entries')
-      .select(`
-        id,
-        amount_collected,
-        payment_method,
-        collection_date,
-        status,
-        notes,
-        cycles (
-          cycle_number
-        ),
-        profiles (
-          full_name
-        ),
-        closing_sessions (
-          id
-        )
-      `)
+      .from('member_collection_details_view')
+      .select('*')
       .eq('chit_fund_id', fundId)
       .eq('member_id', memberId)
       .order('collection_date', { ascending: false })
 
     if (error) {
-      console.error('Error fetching member collections:', error)
+      console.error('Error fetching member collections from view:', error)
       return []
     }
 
     return (data || []).map((entry: any) => ({
       id: entry.id,
       date: entry.collection_date,
-      cycleNumber: entry.cycles?.cycle_number || 0,
+      cycleNumber: entry.cycle_number || 0,
       amount: parseFloat(entry.amount_collected || '0'),
       method: entry.payment_method || 'cash',
-      collector: entry.profiles?.full_name || 'Unknown',
-      status: entry.status === 'closed' ? 'CLOSED' : 'PENDING',
-      closingSession: entry.closing_sessions?.id ? `CS-${entry.closing_sessions.id.slice(0, 8)}` : null,
-      notes: entry.notes,
+      collector: entry.collector_name || 'Unknown',
+      status: entry.display_status || 'PENDING',
+      closingSession: entry.closing_session_reference || null,
+      notes: entry.collection_notes,
       memberId: memberId,
       fundId: fundId
     }))
