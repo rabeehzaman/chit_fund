@@ -3,13 +3,22 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Tables } from '@/lib/supabase/types'
+import { Check, ChevronsUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 type Member = Tables<'members'>
 
@@ -45,6 +54,7 @@ export function MemberSelector({
 }: MemberSelectorProps) {
   const [members, setMembers] = useState<MemberWithChitFund[]>([])
   const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (!chitFundId) {
@@ -55,10 +65,7 @@ export function MemberSelector({
     const fetchMembers = async () => {
       setLoading(true)
       const supabase = createClient()
-      
-      // Add cache-busting query parameter to force fresh data
-      const timestamp = Date.now()
-      
+
       let query = supabase
         .from('members')
         .select(`
@@ -94,36 +101,76 @@ export function MemberSelector({
 
   const isDisabled = disabled || loading || !chitFundId || members.length === 0
 
+  // Find selected member
+  const selectedMember = members.find((member) => member.id === value)
+
   return (
-    <Select 
-      value={value} 
-      onValueChange={onValueChange}
-      disabled={isDisabled}
-    >
-      <SelectTrigger className={className}>
-        <SelectValue 
-          placeholder={
-            loading ? "Loading members..." : 
-            !chitFundId ? "Select chit fund first" :
-            members.length === 0 ? "No members available" :
-            placeholder
-          } 
-        />
-      </SelectTrigger>
-      <SelectContent>
-        {members.map((member) => (
-          <SelectItem key={member.id} value={member.id}>
-            <div className="flex flex-col">
-              <span className="font-medium">{member.full_name}</span>
-              {member.phone && (
-                <span className="text-sm text-muted-foreground">
-                  {member.phone}
-                </span>
-              )}
-            </div>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-full justify-between", className)}
+          disabled={isDisabled}
+        >
+          <div className="flex flex-col items-start text-left overflow-hidden">
+            {selectedMember ? (
+              <>
+                <span className="font-medium truncate">{selectedMember.full_name}</span>
+                {selectedMember.phone && (
+                  <span className="text-xs text-muted-foreground truncate">
+                    {selectedMember.phone}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                {loading ? "Loading members..." :
+                 !chitFundId ? "Select chit fund first" :
+                 members.length === 0 ? "No members available" :
+                 placeholder}
+              </span>
+            )}
+          </div>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search members by name or phone..." />
+          <CommandList>
+            <CommandEmpty>No members found.</CommandEmpty>
+            <CommandGroup>
+              {members.map((member) => (
+                <CommandItem
+                  key={member.id}
+                  value={`${member.full_name} ${member.phone || ''}`}
+                  onSelect={() => {
+                    onValueChange(member.id)
+                    setOpen(false)
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === member.id ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-medium">{member.full_name}</span>
+                    {member.phone && (
+                      <span className="text-sm text-muted-foreground">
+                        {member.phone}
+                      </span>
+                    )}
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }
