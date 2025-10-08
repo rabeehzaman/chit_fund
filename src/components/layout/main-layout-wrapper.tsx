@@ -1,11 +1,11 @@
-import { MainLayout } from '@/components/layout/main-layout'
 import { getCurrentUser } from '@/lib/auth/utils'
+import { MainLayout } from './main-layout'
 
 interface MainLayoutWrapperProps {
   children: React.ReactNode
 }
 
-export default async function MainLayoutWrapper({ children }: MainLayoutWrapperProps) {
+export async function MainLayoutWrapper({ children }: MainLayoutWrapperProps) {
   const user = await getCurrentUser()
 
   return <MainLayout user={user}>{children}</MainLayout>

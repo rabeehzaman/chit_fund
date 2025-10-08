@@ -85,7 +85,7 @@ export interface PayoutData {
 }
 
 export async function fetchOverviewData(): Promise<OverviewData> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const [
@@ -154,7 +154,7 @@ export async function fetchOverviewData(): Promise<OverviewData> {
 }
 
 export async function fetchCollectionsData(): Promise<CollectionData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -201,7 +201,7 @@ export async function fetchCollectionsData(): Promise<CollectionData[]> {
 }
 
 export async function fetchMembersData(): Promise<MemberData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -272,7 +272,7 @@ export async function fetchMembersData(): Promise<MemberData[]> {
 }
 
 export async function fetchFundsData(): Promise<FundData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -342,7 +342,7 @@ export async function fetchFundsData(): Promise<FundData[]> {
 }
 
 export async function fetchClosingsData(): Promise<ClosingData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -393,7 +393,7 @@ export async function fetchClosingsData(): Promise<ClosingData[]> {
 }
 
 export async function fetchPayoutsData(): Promise<PayoutData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -477,7 +477,7 @@ export interface MemberCollectionData {
 
 // Hierarchical data fetching functions using database views
 export async function fetchFundsWithStats(): Promise<FundWithStats[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -515,7 +515,7 @@ export async function fetchFundsWithStats(): Promise<FundWithStats[]> {
 }
 
 export async function fetchFundMembers(fundId: string): Promise<FundMemberData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase
@@ -550,7 +550,7 @@ export async function fetchFundMembers(fundId: string): Promise<FundMemberData[]
 }
 
 export async function fetchMemberCollections(fundId: string, memberId: string): Promise<MemberCollectionData[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const { data, error } = await supabase

@@ -19,8 +19,8 @@ interface PageProps {
 
 export default async function ChitFundCyclesPage({ params }: PageProps) {
   const { id } = await params
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Fetch chit fund details
   const { data: chitFund } = await supabase
     .from('chit_funds')

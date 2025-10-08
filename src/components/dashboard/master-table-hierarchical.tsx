@@ -30,12 +30,10 @@ import {
   User,
   FileText
 } from 'lucide-react'
-import { 
-  FundWithStats, 
-  FundMemberData, 
-  MemberCollectionData, 
-  fetchFundMembers, 
-  fetchMemberCollections 
+import {
+  FundWithStats,
+  FundMemberData,
+  MemberCollectionData
 } from '@/lib/services/master-table-data'
 
 interface HierarchicalMasterTableProps {
@@ -112,7 +110,8 @@ export function HierarchicalMasterTable({ funds, searchTerm, isLoading }: Hierar
         setLoading(prev => ({ ...prev, members: newLoadingMembers }))
         
         try {
-          const members = await fetchFundMembers(fundId)
+          const response = await fetch(`/api/fund-members?fundId=${fundId}`)
+          const members = await response.json()
           setCachedData(prev => ({
             ...prev,
             members: { ...prev.members, [fundId]: members }
@@ -145,14 +144,15 @@ export function HierarchicalMasterTable({ funds, searchTerm, isLoading }: Hierar
         setLoading(prev => ({ ...prev, collections: newLoadingCollections }))
         
         try {
-          const collections = await fetchMemberCollections(fundId, memberId)
+          const response = await fetch(`/api/member-collections?fundId=${fundId}&memberId=${memberId}`)
+          const collections = await response.json()
           setCachedData(prev => ({
             ...prev,
             collections: { ...prev.collections, [collectionKey]: collections }
           }))
         } catch (error) {
           console.error('Error loading collections:', error)
-        } finally {
+        } finally{
           const updatedLoadingCollections = new Set(loading.collections)
           updatedLoadingCollections.delete(collectionKey)
           setLoading(prev => ({ ...prev, collections: updatedLoadingCollections }))

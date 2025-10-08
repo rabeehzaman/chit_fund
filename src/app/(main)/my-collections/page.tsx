@@ -41,6 +41,7 @@ export default function MyCollectionsPage() {
   const [collections, setCollections] = useState<CollectionEntry[]>([])
   const [filteredCollections, setFilteredCollections] = useState<CollectionEntry[]>([])
   const [collectors, setCollectors] = useState<any[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -49,9 +50,34 @@ export default function MyCollectionsPage() {
   const [dateToFilter, setDateToFilter] = useState('')
 
   useEffect(() => {
-    fetchCollections()
-    fetchCollectors()
+    fetchCurrentUser()
   }, [])
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchCollections()
+      fetchCollectors()
+    }
+  }, [currentUser])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .eq('id', user.id)
+          .single()
+
+        setCurrentUser(profile)
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+    }
+  }
 
   const fetchCollectors = async () => {
     try {
@@ -75,8 +101,8 @@ export default function MyCollectionsPage() {
     setLoading(true)
     try {
       const supabase = createClient()
-      
-      const { data, error } = await supabase
+
+      let query = supabase
         .from('collection_entries')
         .select(`
           *,
@@ -86,7 +112,13 @@ export default function MyCollectionsPage() {
           closing_sessions (status, session_date),
           collector:profiles!collector_id (id, full_name)
         `)
-        .order('collection_date', { ascending: false })
+
+      // Filter by collector ID if user is a collector
+      if (currentUser?.role === 'collector') {
+        query = query.eq('collector_id', currentUser.id)
+      }
+
+      const { data, error } = await query.order('collection_date', { ascending: false })
 
       if (error) {
         console.error('Error fetching collections:', error)
@@ -231,7 +263,9 @@ export default function MyCollectionsPage() {
                   Back to Dashboard
                 </Button>
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900">All Collections</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {currentUser?.role === 'collector' ? 'My Collections' : 'All Collections'}
+              </h1>
             </div>
             <div className="flex items-center space-x-4">
               <Button onClick={exportToCSV} variant="outline" size="sm">
@@ -285,7 +319,7 @@ export default function MyCollectionsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div className={`grid grid-cols-1 gap-4 ${currentUser?.role === 'admin' ? 'md:grid-cols-6' : 'md:grid-cols-5'}`}>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
@@ -305,19 +339,22 @@ export default function MyCollectionsPage() {
                   <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={collectorFilter} onValueChange={setCollectorFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by collector" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Collectors</SelectItem>
-                  {collectors.map((collector) => (
-                    <SelectItem key={collector.id} value={collector.id}>
-                      {collector.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Only show collector filter for admins */}
+              {currentUser?.role === 'admin' && (
+                <Select value={collectorFilter} onValueChange={setCollectorFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by collector" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Collectors</SelectItem>
+                    {collectors.map((collector) => (
+                      <SelectItem key={collector.id} value={collector.id}>
+                        {collector.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Input
                 type="date"
                 placeholder="From date"
@@ -370,7 +407,7 @@ export default function MyCollectionsPage() {
                       <TableHead>Chit Fund</TableHead>
                       <TableHead>Cycle</TableHead>
                       <TableHead>Member</TableHead>
-                      <TableHead>Collector</TableHead>
+                      {currentUser?.role === 'admin' && <TableHead>Collector</TableHead>}
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Payment</TableHead>
                       <TableHead>Status</TableHead>
@@ -407,11 +444,13 @@ export default function MyCollectionsPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-blue-600">
-                            {entry.collector?.full_name || 'Unknown'}
-                          </div>
-                        </TableCell>
+                        {currentUser?.role === 'admin' && (
+                          <TableCell>
+                            <div className="font-medium text-blue-600">
+                              {entry.collector?.full_name || 'Unknown'}
+                            </div>
+                          </TableCell>
+                        )}
                         <TableCell className="text-right font-medium">
                           {formatCurrency(entry.amount_collected)}
                         </TableCell>

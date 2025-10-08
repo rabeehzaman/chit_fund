@@ -8,7 +8,7 @@ Chit Fund Management System with Field Collectors & Cash Closing Workflows
 **Core Concept**: A digital system to manage chit funds with field collectors who collect payments from members, submit cash batches for admin approval, and track all financial operations with proper audit trails.
 
 **Key Features Implemented**:
-- ❌ ~~Admin/Collector role-based system~~ → **Simplified single-admin system**
+- ✅ Admin/Collector role-based authentication system
 - ✅ Real-time chit fund and member management
 - ✅ Collection entry recording with closing session workflows (Phase 3)
 - ✅ Cash batch submission and approval process (Phase 4)
@@ -20,7 +20,7 @@ Chit Fund Management System with Field Collectors & Cash Closing Workflows
 - **UI Components**: Shadcn/ui with Tailwind CSS
 - **Forms**: React Hook Form + Zod validation
 - **Icons**: Lucide React
-- **Authentication**: ❌ REMOVED - Direct database access
+- **Authentication**: ✅ Supabase Auth with email/password login
 
 ## Common Commands
 - **Development**: `npm run dev`
@@ -34,6 +34,8 @@ Chit Fund Management System with Field Collectors & Cash Closing Workflows
 ```
 src/
 ├── app/
+│   ├── (auth)/
+│   │   └── login/             # Login page with Supabase Auth (invitation-only)
 │   ├── (main)/
 │   │   ├── collect/           # Collection entry interface
 │   │   ├── my-collections/    # Collection history view
@@ -49,7 +51,8 @@ src/
 │   │   ├── members/           # Member management
 │   │   └── users/             # User management
 │   ├── dashboard/             # Main dashboard with statistics
-│   └── api/                   # API routes (if needed)
+│   ├── api/                   # API routes (if needed)
+│   └── middleware.ts          # Auth middleware for route protection
 ├── components/
 │   ├── ui/                    # Shadcn UI components
 │   ├── shared/                # Shared selectors and components
@@ -76,11 +79,14 @@ src/
 ## Development Status
 
 ### ✅ Phase 1: Database Foundation & Auth
-- Enhanced profiles table with admin/collector roles
-- Members table for non-login users
-- Cycles table with auto-generation
-- Collection entries and closing sessions tables
-- Row Level Security (RLS) policies implemented
+- ✅ Supabase Auth integration with email/password login (invitation-only)
+- ✅ Enhanced profiles table with admin/collector roles
+- ✅ Members table for non-login users (chit fund members)
+- ✅ Cycles table with auto-generation
+- ✅ Collection entries and closing sessions tables
+- ✅ Row Level Security (RLS) policies implemented
+- ✅ Middleware for route protection and session management
+- ✅ Secure login page with controlled access (no public signup)
 
 ### ✅ Phase 2: Admin Dashboard & Management
 - Real-time dashboard with role-based statistics
@@ -210,7 +216,7 @@ src/
 - Enhanced user management
   - Collector performance tracking
   - Access logs and audit trails
-  - Role-based permissions (if auth is re-added)
+  - Advanced role-based permissions and granular access control
 
 ### 🚧 Phase 8: Integration & Automation
 **Goal**: External integrations and workflow automation
@@ -233,12 +239,13 @@ src/
   - Webhook support for external systems
   - Mobile app API endpoints
 
-## Key Business Rules (Updated)
-1. ❌ ~~Only Admin/Collectors login~~ → **No authentication required - direct access**
-2. ✅ **Collection → Close → Approve workflow** - All payments must go through closing sessions (Phase 4)
-3. ✅ **Reconciliation required** - Declared totals must match system totals (Phase 4) 
-4. ✅ **Audit trail mandatory** - All financial operations logged (Phase 4)
-5. ❌ ~~Role-based access~~ → **Single admin context for all operations**
+## Key Business Rules
+1. ✅ **Authentication required** - Admin/Collector users must login to access the system
+2. ✅ **Role-based access control** - Different permissions for Admin and Collector roles
+3. ✅ **Collection → Close → Approve workflow** - All payments must go through closing sessions (Phase 4)
+4. ✅ **Reconciliation required** - Declared totals must match system totals (Phase 4)
+5. ✅ **Audit trail mandatory** - All financial operations logged with user tracking (Phase 4)
+6. ✅ **Protected routes** - Middleware enforces authentication on all main application pages
 
 ## Development Guidelines
 - Use Supabase MCP tools for database operations
@@ -249,35 +256,169 @@ src/
 - Test with Playwright for UI validation
 
 ## Environment Setup
-- **Authentication completely removed** - System now works without any auth requirements
-- **Simplified access model** - Direct database access for all operations
-- **Default admin context** - Uses system-admin user for operations that need user context
+- **Authentication required** - Users must login with email/password to access the system
+- **Supabase Auth integration** - Session-based authentication with cookie management
+- **Protected routes** - Middleware redirects unauthenticated users to /login
+- **User profiles** - Linked to profiles table with role and metadata
 - Real database connections work in both dev and production
 - Statistics pull from actual database in all modes
+- RLS policies enforce data access based on authenticated user
 
-## Authentication Status: REMOVED ❌
-- **No login required** - All pages accessible directly
-- **No user sessions** - System operates with default admin context
-- **Simplified workflow** - Forms and operations work immediately without auth barriers
-- **Default user context**: 
-  ```javascript
-  {
-    id: 'system-admin',
-    email: 'admin@chitfund.com', 
-    full_name: 'System Administrator',
-    role: 'admin'
-  }
-  ```
+## Authentication Status: ACTIVE ✅
+- **Invitation-only access** - Users must be created by administrators via Supabase Dashboard
+- **Login required** - All protected routes require authentication
+- **Session management** - Supabase Auth handles user sessions with secure cookies
+- **Role-based workflow** - Admin and Collector roles with different permissions
+- **User context**: Retrieved from `supabase.auth.getUser()` in middleware and server components
+- **Protected paths**: `/dashboard`, `/collect`, `/my-collections`, `/collections`, `/closings`, `/approvals`, `/chit-funds`, `/members`, `/users`, `/arrears`, `/advances`
+- **Public paths**: `/login`, static assets (signup disabled for security)
 
-## Navigation Structure (Updated)
-- **Header**: "Chit Fund Management System" with Home button
-- **Navigation Tabs**: 
+### Authentication Implementation Details
+**Files**:
+- `src/middleware.ts` - Route protection and session validation
+- `src/app/(auth)/login/page.tsx` - Login form with Supabase Auth
+- `src/lib/supabase/client.ts` - Browser-side Supabase client
+- `src/lib/supabase/server.ts` - Server-side Supabase client with cookie handling
+- `src/components/layout/user-nav.tsx` - User profile menu with logout
+- `src/app/(main)/users/page.tsx` - Read-only user management (view, edit, activate/deactivate)
+
+**Authentication Flow**:
+1. **Admin creates user** → Via Supabase Dashboard → Authentication → Users → Invite User
+2. **User receives invitation** → Email with login credentials or password reset link
+3. User visits protected route → Middleware checks `supabase.auth.getUser()`
+4. If no user → Redirect to `/login?redirectTo=/original-path`
+5. User logs in → `supabase.auth.signInWithPassword()`
+6. Success → Redirect to dashboard or original path
+7. All subsequent requests include auth cookie
+8. Server components use `createClient()` from `lib/supabase/server.ts` to get user
+
+**Getting Current User**:
+```typescript
+// In server components or API routes
+const supabase = await createClient()
+const { data: { user } } = await supabase.auth.getUser()
+
+// In client components
+const supabase = createClient()
+const { data: { user } } = await supabase.auth.getUser()
+```
+
+## User Management Policy
+
+**Security Model**: Invitation-only access for financial security and compliance
+
+**User Creation Process**:
+1. Admin accesses Supabase Dashboard → Authentication → Users
+2. Click "Invite User" button
+3. Enter email, assign role metadata (admin/collector)
+4. System sends invitation email with credentials
+5. User receives email and sets password
+6. User can now login via `/login` page
+
+**User Management Interface** (`/users`):
+- **Read-only from frontend** - No "Add User" button for security
+- **View all users** - List administrators and collectors
+- **Edit user details** - Update name, phone, role, address
+- **Activate/Deactivate** - Soft delete via `is_active` flag (preserves data)
+- **Statistics** - Total users, admins, collectors count
+
+**Why This Approach**:
+- ✅ Prevents unauthorized account creation
+- ✅ Ensures proper vetting of financial system users
+- ✅ Maintains audit trail of user creation
+- ✅ Compliance-ready for financial regulations
+- ✅ Centralized access control via Supabase Dashboard
+
+**User Types**:
+1. **System Users (profiles with auth)** - Admin/Collector who can login
+2. **Chit Fund Members (members table)** - Payment recipients, no login access
+
+## Role-Based Access Control (RBAC)
+
+**Security Model**: Strict role-based permissions with UI and server-side enforcement
+
+### Admin vs Collector Permissions
+
+**Admin Access** (Full System Access):
+- ✅ Dashboard - System-wide analytics and KPIs
+- ✅ Chit Funds - Create, edit, delete funds
+- ✅ Collections - Record, view all collections (including pending)
+- ✅ Closings - Create, manage, and **approve** closing sessions
+- ✅ Cashbook - View ledger and cash summary
+- ✅ Members - Manage all chit fund members
+- ✅ Arrears - View and manage overdue payments
+- ✅ Advances - View and manage advance payments
+- ✅ Users - Manage system users (read-only, creation via Supabase)
+
+**Collector Access** (Limited Field Operations):
+- ❌ Dashboard - No access (redirects to `/collect`)
+- ❌ Chit Funds - No access to fund management
+- ✅ Collections - **Record Collection** and **My Collections** only
+- ❌ Pending Collections - Admin only
+- ✅ Closings - **Create** and **Manage** their own closing sessions
+- ❌ Approval Queue - Admin only
+- ❌ Cashbook - No access
+- ❌ Members - No access
+- ❌ Arrears - No access
+- ❌ Advances - No access
+- ❌ Users - No access
+
+### Implementation Details
+
+**1. UI-Level Protection** (`src/components/layout/app-sidebar.tsx`):
+- Navigation items filtered based on `user.role`
+- Uses `roles` array on each navigation item
+- Collectors only see: Collections (2 items) and Closings (2 items)
+
+**2. Server-Side Protection** (`src/lib/auth/utils.ts`):
+- `requireAdmin()` - Guards admin-only pages
+- Redirects collectors to `/collect` if they try to access admin pages
+- Applied to: Dashboard, Chit Funds, Pending Collections, Approval Queue, Cashbook, Members, Arrears, Users
+
+**3. Landing Page Logic** (`src/app/page.tsx`):
+- Admins → Redirected to `/dashboard`
+- Collectors → Redirected to `/collect`
+
+**4. Data Filtering** (To be implemented):
+- Collectors should only see their own collections and closings
+- Queries need `WHERE collector_id = current_user.id` filter
+- Applies to: `/my-collections`, `/closings` pages
+
+### Adding Role Protection to New Pages
+
+```typescript
+// At the top of any admin-only page:
+import { requireAdmin } from '@/lib/auth/utils'
+
+export default async function AdminOnlyPage() {
+  await requireAdmin() // Redirects collectors to /collect
+
+  // Rest of page logic
+}
+```
+
+### Navigation Role Configuration
+
+```typescript
+// In app-sidebar.tsx
+{
+  label: 'Page Name',
+  href: '/page',
+  icon: IconComponent,
+  roles: ['admin']  // or ['admin', 'collector'] or undefined for all
+}
+```
+
+## Navigation Structure
+- **Header**: "Chit Fund Management System" with user profile menu
+- **Sidebar Navigation**:
   - Dashboard | Chit Funds | Collections | Closings | Members | Arrears | Advances | Users Management
-  - **Collections Dropdown**: Record Collection | My Collections | Pending Collections
-  - **Closings Dropdown**: Create Closing Session | Manage Closings | Approval Queue
+  - **Collections Submenu**: Record Collection | My Collections | Pending Collections
+  - **Closings Submenu**: Create Closing Session | Manage Closings | Approval Queue
   - **Chit Funds**: Individual fund pages now include "Cycles" button for cycle management
-- **Simplified Dashboard**: Removed role-based conditional logic
-- **Direct Access**: All management pages accessible without authentication
+- **User Menu**: Profile, theme toggle, and logout options
+- **Role-based Dashboard**: Statistics and views adjusted based on admin/collector role
+- **Protected Navigation**: All main pages require authentication
 
 ## Phase 4 Implementation Status ✅
 

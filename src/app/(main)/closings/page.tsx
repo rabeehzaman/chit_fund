@@ -48,6 +48,7 @@ interface ClosingSessionStats {
 export default function ClosingsPage() {
   const [closingSessions, setClosingSessions] = useState<ClosingSession[]>([])
   const [filteredSessions, setFilteredSessions] = useState<ClosingSession[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [stats, setStats] = useState<ClosingSessionStats>({
     total_count: 0,
     draft_count: 0,
@@ -63,8 +64,33 @@ export default function ClosingsPage() {
   const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
-    fetchClosingSessions()
+    fetchCurrentUser()
   }, [])
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchClosingSessions()
+    }
+  }, [currentUser])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .eq('id', user.id)
+          .single()
+
+        setCurrentUser(profile)
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+    }
+  }
 
   useEffect(() => {
     filterSessions()
@@ -74,15 +100,21 @@ export default function ClosingsPage() {
     setLoading(true)
     try {
       const supabase = createClient()
-      
-      const { data, error } = await supabase
+
+      let query = supabase
         .from('closing_sessions')
         .select(`
           *,
           profiles!collector_id (full_name),
           approved_by_profile:profiles!approved_by (full_name)
         `)
-        .order('created_at', { ascending: false })
+
+      // Filter by collector ID if user is a collector
+      if (currentUser?.role === 'collector') {
+        query = query.eq('collector_id', currentUser.id)
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error fetching closing sessions:', error)
@@ -413,7 +445,7 @@ export default function ClosingsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Collector</TableHead>
+                  {currentUser?.role === 'admin' && <TableHead>Collector</TableHead>}
                   <TableHead>Declared</TableHead>
                   <TableHead>System</TableHead>
                   <TableHead>Variance</TableHead>
@@ -430,7 +462,7 @@ export default function ClosingsPage() {
                       <TableCell>
                         {new Date(session.session_date).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>{session.profiles.full_name}</TableCell>
+                      {currentUser?.role === 'admin' && <TableCell>{session.profiles.full_name}</TableCell>}
                       <TableCell>{formatCurrency(session.declared_total)}</TableCell>
                       <TableCell>{formatCurrency(session.system_total)}</TableCell>
                       <TableCell>

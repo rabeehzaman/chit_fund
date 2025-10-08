@@ -8,7 +8,7 @@ import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, Users, DollarSign, CheckCircle } from 'lucide-react'
 
 export default async function AdvancesPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Get all members with advance balances
   const { data: advancesData } = await supabase

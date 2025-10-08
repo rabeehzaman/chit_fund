@@ -1,5 +1,5 @@
 import { MasterTableClient } from './master-table-client'
-import { fetchHierarchicalMasterData } from '@/lib/services/master-table-data'
+import { fetchHierarchicalMasterData, FundWithStats } from '@/lib/services/master-table-data'
 
 // Force dynamic rendering and disable all caching
 export const dynamic = 'force-dynamic'
@@ -7,7 +7,14 @@ export const fetchCache = 'force-no-store'
 export const revalidate = 0
 
 export async function MasterTableWrapper() {
-  let data = {
+  let data: {
+    funds: FundWithStats[]
+    totalFunds: number
+    activeFunds: number
+    totalMembers: number
+    totalCollected: number
+    totalValue: number
+  } = {
     funds: [],
     totalFunds: 0,
     activeFunds: 0,

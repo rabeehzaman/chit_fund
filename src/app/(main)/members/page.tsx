@@ -17,7 +17,7 @@ import { Plus, Users, UserCheck, UserX } from 'lucide-react'
 
 export default async function MembersPage() {
   // Fetch real data from Supabase (authentication removed, RLS disabled)
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Fetch members data with assignments
   const { data: members } = await supabase

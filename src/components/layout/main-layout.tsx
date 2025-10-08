@@ -11,6 +11,12 @@ import {
 
 interface MainLayoutProps {
   children: React.ReactNode
+  user?: {
+    id: string
+    email: string
+    full_name: string
+    role: 'admin' | 'collector'
+  }
 }
 
 function FloatingTrigger() {
@@ -28,11 +34,11 @@ function FloatingTrigger() {
   )
 }
 
-export function MainLayout({ children }: MainLayoutProps) {
+export function MainLayout({ children, user }: MainLayoutProps) {
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar user={user} />
       <SidebarInset>
         <FloatingTrigger />
         {/* Main Content */}

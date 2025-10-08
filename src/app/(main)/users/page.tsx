@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AddUserDialog } from '@/components/users/add-user-dialog'
 import { EditUserDialog } from '@/components/users/edit-user-dialog'
 import { ToggleUserStatusButton } from '@/components/users/toggle-user-status-button'
 import { Loader2 } from 'lucide-react'
@@ -84,12 +83,9 @@ export default function UsersManagementPage() {
 
   return (
     <>
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">System Users</h2>
-            <p className="text-gray-600">Manage administrators and collectors</p>
-          </div>
-          <AddUserDialog onSuccess={fetchUsers} />
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">System Users</h2>
+          <p className="text-gray-600">View and manage administrators and collectors (users are created via Supabase Dashboard)</p>
         </div>
 
         {/* Users Table */}
@@ -160,7 +156,7 @@ export default function UsersManagementPage() {
             ) : (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-4">No users found in the system.</p>
-                <AddUserDialog onSuccess={fetchUsers} />
+                <p className="text-sm text-gray-400">Create users via Supabase Dashboard</p>
               </div>
             )}
           </CardContent>

@@ -17,7 +17,7 @@ export const revalidate = 0
 
 export default async function ChitFundsPage() {
   // Fetch real data from Supabase (authentication removed, RLS disabled)
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Fetch chit funds with dynamic calculations
   const { data: chitFunds } = await supabase

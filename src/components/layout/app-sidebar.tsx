@@ -34,17 +34,21 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  SidebarFooter,
 } from '@/components/ui/sidebar'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { UserNav } from './user-nav'
 
 interface NavigationItem {
   label: string
   href?: string
   icon: React.ComponentType<{ className?: string }>
+  roles?: ('admin' | 'collector')[] // Which roles can see this item (undefined = all)
   children?: {
     label: string
     href: string
     icon?: React.ComponentType<{ className?: string }>
+    roles?: ('admin' | 'collector')[]
   }[]
 }
 
@@ -52,66 +56,77 @@ const navigationItems: NavigationItem[] = [
   {
     label: 'Dashboard',
     href: '/',
-    icon: Home
+    icon: Home,
+    roles: ['admin'] // Admin only
   },
   {
     label: 'Chit Funds',
     href: '/chit-funds',
-    icon: Wallet
+    icon: Wallet,
+    roles: ['admin'] // Admin only
   },
   {
     label: 'Collections',
     icon: Coins,
+    roles: ['admin', 'collector'], // Both can see Collections
     children: [
-      { 
-        label: 'Record Collection', 
+      {
+        label: 'Record Collection',
         href: '/collect',
-        icon: Plus
+        icon: Plus,
+        roles: ['admin', 'collector']
       },
-      { 
-        label: 'My Collections', 
+      {
+        label: 'My Collections',
         href: '/my-collections',
-        icon: FileText
+        icon: FileText,
+        roles: ['admin', 'collector']
       },
-      { 
-        label: 'Pending Collections', 
+      {
+        label: 'Pending Collections',
         href: '/collections/pending',
-        icon: ClipboardList
+        icon: ClipboardList,
+        roles: ['admin'] // Admin only
       }
     ]
   },
   {
     label: 'Closings',
     icon: Lock,
+    roles: ['admin', 'collector'], // Both can see Closings
     children: [
-      { 
-        label: 'Create Closing Session', 
+      {
+        label: 'Create Closing Session',
         href: '/closings/create',
-        icon: Plus
+        icon: Plus,
+        roles: ['admin', 'collector']
       },
-      { 
-        label: 'Manage Closings', 
+      {
+        label: 'Manage Closings',
         href: '/closings',
-        icon: ClipboardList
+        icon: ClipboardList,
+        roles: ['admin', 'collector']
       },
-      { 
-        label: 'Approval Queue', 
+      {
+        label: 'Approval Queue',
         href: '/approvals',
-        icon: CheckCircle2
+        icon: CheckCircle2,
+        roles: ['admin'] // Admin only
       }
     ]
   },
   {
     label: 'Cashbook',
     icon: BookOpen,
+    roles: ['admin'], // Admin only
     children: [
-      { 
-        label: 'Cashbook Ledger', 
+      {
+        label: 'Cashbook Ledger',
         href: '/cashbook',
         icon: BookOpen
       },
-      { 
-        label: 'Cash Summary', 
+      {
+        label: 'Cash Summary',
         href: '/cashbook/summary',
         icon: BarChart3
       }
@@ -120,17 +135,20 @@ const navigationItems: NavigationItem[] = [
   {
     label: 'Members',
     href: '/members',
-    icon: Users
+    icon: Users,
+    roles: ['admin'] // Admin only
   },
   {
     label: 'Arrears',
     href: '/arrears',
-    icon: AlertCircle
+    icon: AlertCircle,
+    roles: ['admin'] // Admin only
   },
   {
     label: 'Users Management',
     href: '/users',
-    icon: UserCog
+    icon: UserCog,
+    roles: ['admin'] // Admin only
   }
 ]
 
@@ -266,7 +284,16 @@ const AnimatedSidebarMenuSub = ({
   )
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  user?: {
+    id: string
+    email: string
+    full_name: string
+    role: 'admin' | 'collector'
+  }
+}
+
+export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const pathname = usePathname()
   const [expandedItems, setExpandedItems] = React.useState<Set<string>>(new Set())
 
@@ -274,14 +301,34 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isActiveParent = (children?: NavigationItem['children']) => 
     children?.some(child => pathname === child.href)
 
+  // Filter navigation items based on user role
+  const filteredNavigationItems = React.useMemo(() => {
+    if (!user) return navigationItems
+
+    return navigationItems
+      .filter(item => !item.roles || item.roles.includes(user.role))
+      .map(item => {
+        // Filter children based on role
+        if (item.children) {
+          const filteredChildren = item.children.filter(
+            child => !child.roles || child.roles.includes(user.role)
+          )
+          return { ...item, children: filteredChildren }
+        }
+        return item
+      })
+      // Remove parent items with no children after filtering
+      .filter(item => !item.children || item.children.length > 0)
+  }, [user])
+
   // Auto-expand parent menu if child is active
   React.useEffect(() => {
-    navigationItems.forEach(item => {
+    filteredNavigationItems.forEach(item => {
       if (item.children && isActiveParent(item.children)) {
         setExpandedItems(prev => new Set([...prev, item.label]))
       }
     })
-  }, [pathname])
+  }, [pathname, filteredNavigationItems])
 
   const toggleSubmenu = (itemLabel: string) => {
     setExpandedItems(prev => {
@@ -320,7 +367,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item, index) => {
+              {filteredNavigationItems.map((item, index) => {
                 const isExpanded = expandedItems.has(item.label)
                 const hasActiveChild = isActiveParent(item.children)
                 
@@ -372,7 +419,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               })}
               
               {/* Theme Toggle as a menu item */}
-              <AnimatedSidebarMenuItem index={navigationItems.length + 1}>
+              <AnimatedSidebarMenuItem index={filteredNavigationItems.length + 1}>
                 <div className="flex items-center justify-center p-2 mt-4 border-t border-sidebar-border">
                   <ThemeToggle />
                 </div>
@@ -381,7 +428,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      
+
+      {user && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <UserNav user={user} />
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
+
       <SidebarRail />
     </Sidebar>
   )

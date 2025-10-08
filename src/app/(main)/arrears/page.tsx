@@ -25,7 +25,7 @@ interface ArrearsData {
 }
 
 export default async function ArrearsPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Get all members with their arrears information
   const { data: arrearsData, error } = await supabase
