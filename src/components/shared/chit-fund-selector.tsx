@@ -67,11 +67,11 @@ export function ChitFundSelector({
       </SelectTrigger>
       <SelectContent>
         {chitFunds.map((fund) => (
-          <SelectItem key={fund.id} value={fund.id}>
-            <div className="flex flex-col">
+          <SelectItem key={fund.id} value={fund.id} textValue={fund.name}>
+            <div className="flex flex-col py-1">
               <span className="font-medium">{fund.name}</span>
-              <span className="text-sm text-muted-foreground">
-                ₹{fund.installment_per_member} × {fund.duration_months} months
+              <span className="text-xs text-muted-foreground">
+                ₹{fund.installment_per_member.toLocaleString()} × {fund.duration_months} months
               </span>
             </div>
           </SelectItem>

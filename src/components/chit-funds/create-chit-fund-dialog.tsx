@@ -117,7 +117,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
           cycle_interval_value: data.cycle_interval_value,
           max_members: null, // No limit - fund grows with members
           start_date: data.start_date,
-          status: 'planning',
+          status: 'active',
           ...(creatorId ? { created_by: creatorId } : {}),
         })
         .select()

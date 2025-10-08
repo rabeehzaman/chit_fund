@@ -1,4 +1,5 @@
 import { MasterTableClient } from './master-table-client'
+import { fetchHierarchicalMasterData } from '@/lib/services/master-table-data'
 
 // Force dynamic rendering and disable all caching
 export const dynamic = 'force-dynamic'
@@ -16,32 +17,17 @@ export async function MasterTableWrapper() {
   }
 
   try {
-    // Use API route with cache-busting timestamp
-    const timestamp = Date.now()
+    // Direct database call - faster and more reliable than API route
+    // Real-time updates are now handled by Supabase Realtime on client side
+    console.log('MasterTableWrapper: Fetching data directly from database...')
 
-    // Use relative URL for better compatibility across environments
-    const url = `/api/hierarchical-master-data?t=${timestamp}`
+    data = await fetchHierarchicalMasterData()
 
-    console.log('MasterTableWrapper: Fetching fresh data from:', url)
-
-    const response = await fetch(url, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
+    console.log('MasterTableWrapper: Successfully fetched data:', {
+      totalFunds: data.totalFunds,
+      totalMembers: data.totalMembers,
+      timestamp: new Date().toISOString()
     })
-
-    if (response.ok) {
-      data = await response.json()
-      console.log('MasterTableWrapper: Successfully fetched fresh data:', {
-        totalFunds: data.totalFunds,
-        totalMembers: data.totalMembers,
-        timestamp: new Date().toISOString()
-      })
-    } else {
-      console.error('MasterTableWrapper: Failed to fetch hierarchical master data:', response.statusText)
-    }
   } catch (error) {
     console.error('MasterTableWrapper: Error fetching hierarchical master data:', error)
   }
