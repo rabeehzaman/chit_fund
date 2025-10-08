@@ -6,8 +6,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { createClient } from '@/lib/supabase/client'
-import { ChitFundSelector, CycleSelector, MemberSelector } from '@/components/shared'
-import { PaymentPreview } from '@/components/shared/payment-preview'
+import { ChitFundSelector, MemberSelector } from '@/components/shared'
+import { CycleAllocationPreview } from '@/components/shared/cycle-allocation-preview'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -15,27 +15,25 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
-import { Save, CheckCircle, AlertCircle } from 'lucide-react'
+import { Save, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react'
 import { ensureSystemProfile, getAnyProfileId, SYSTEM_PROFILE_ID } from '@/lib/system'
-import { calculatePaymentLimits, validatePaymentAmount, getPaymentMessage, getCyclePaymentStatus, validatePaymentAttempt, getNextPayableCycle } from '@/lib/payment-utils'
-import type { PaymentLimits, CyclePaymentStatus, PaymentValidation, NextPayableCycle } from '@/lib/payment-utils'
+import { getMemberPaymentSummary, getAllocatedCycles } from '@/lib/payment-utils'
+import type { MemberPaymentSummary, CycleAllocation } from '@/lib/payment-utils'
 
 // Dynamic validation schema creator
-const createCollectionFormSchema = (paymentLimits?: PaymentLimits) => {
+const createCollectionFormSchema = (maxPayable?: number) => {
   return z.object({
     collectorId: z.string().min(1, 'Please select the collector who collected this payment'),
     chitFundId: z.string().min(1, 'Please select a chit fund'),
-    cycleId: z.string().min(1, 'Please select a cycle'),
     memberId: z.string().min(1, 'Please select a member'),
     amountCollected: z.number()
       .min(0.01, 'Amount must be greater than 0')
       .refine((value) => {
-        if (!paymentLimits) return true
-        const validation = validatePaymentAmount(value, paymentLimits)
-        return validation.isValid
+        if (!maxPayable) return true
+        return value <= maxPayable
       }, {
-        message: paymentLimits ? 
-          `Payment must be between ₹${paymentLimits.minimum.toFixed(2)} and ₹${paymentLimits.maximum.toFixed(2)}` :
+        message: maxPayable ?
+          `Payment cannot exceed remaining obligation of ₹${maxPayable.toFixed(2)}` :
           'Invalid payment amount'
       }),
     paymentMethod: z.enum(['cash', 'transfer'], {
@@ -53,18 +51,15 @@ export default function CollectPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [collectors, setCollectors] = useState<any[]>([])
   const [selectedChitFund, setSelectedChitFund] = useState<string | null>(null)
-  const [selectedCycle, setSelectedCycle] = useState<string | null>(null)
   const [selectedMember, setSelectedMember] = useState<string | null>(null)
-  const [paymentLimits, setPaymentLimits] = useState<PaymentLimits | null>(null)
-  const [cyclePaymentStatus, setCyclePaymentStatus] = useState<CyclePaymentStatus | null>(null)
-  const [nextPayableCycle, setNextPayableCycle] = useState<NextPayableCycle | null>(null)
+  const [paymentSummary, setPaymentSummary] = useState<MemberPaymentSummary | null>(null)
+  const [allocations, setAllocations] = useState<CycleAllocation[]>([])
 
   const form = useForm<CollectionFormValues>({
-    resolver: zodResolver(createCollectionFormSchema(paymentLimits || undefined)),
+    resolver: zodResolver(createCollectionFormSchema(paymentSummary?.totalRemaining || undefined)),
     defaultValues: {
       collectorId: '',
       chitFundId: '',
-      cycleId: '',
       memberId: '',
       amountCollected: undefined as any,
       paymentMethod: 'cash',
@@ -92,47 +87,19 @@ export default function CollectPage() {
     fetchCollectors()
   }, [])
 
-  // Fetch cycle payment status when member, cycle, and chit fund are selected
+  // Fetch member payment summary when member and chit fund are selected
   useEffect(() => {
-    const fetchCyclePaymentStatus = async () => {
-      if (!selectedMember || !selectedCycle || !selectedChitFund) {
-        setCyclePaymentStatus(null)
-        setPaymentLimits(null)
-        setNextPayableCycle(null)
+    const fetchPaymentSummary = async () => {
+      if (!selectedMember || !selectedChitFund) {
+        setPaymentSummary(null)
+        setAllocations([])
         return
       }
 
       try {
-        // Get cycle payment status
-        const status = await getCyclePaymentStatus(selectedMember, selectedCycle)
-        setCyclePaymentStatus(status)
-        
-        // If cycle is fully paid, suggest next cycle
-        if (status?.isFullyPaid) {
-          const nextCycle = await getNextPayableCycle(selectedMember, selectedChitFund, selectedCycle)
-          setNextPayableCycle(nextCycle)
-        } else {
-          setNextPayableCycle(null)
-        }
+        const summary = await getMemberPaymentSummary(selectedMember, selectedChitFund)
+        setPaymentSummary(summary)
 
-        // Set payment limits based on cycle status
-        if (status && !status.isFullyPaid) {
-          const limits: PaymentLimits = {
-            minimum: 1,
-            maximum: status.remainingAmount,
-            recommended: Math.min(status.installmentAmount, status.remainingAmount),
-            totalObligation: status.installmentAmount,
-            totalPaid: status.amountPaid,
-            remainingObligation: status.remainingAmount,
-            installmentAmount: status.installmentAmount,
-            cyclesRemaining: 1,
-            totalCycles: 1
-          }
-          setPaymentLimits(limits)
-        } else {
-          setPaymentLimits(null)
-        }
-        
         // Re-validate current amount
         const currentAmount = form.getValues('amountCollected')
         if (currentAmount > 0) {
@@ -140,55 +107,59 @@ export default function CollectPage() {
           form.trigger('amountCollected')
         }
       } catch (error) {
-        console.error('Error fetching cycle payment status:', error)
-        setCyclePaymentStatus(null)
-        setPaymentLimits(null)
-        setNextPayableCycle(null)
+        console.error('Error fetching payment summary:', error)
+        setPaymentSummary(null)
+        setAllocations([])
       }
     }
 
-    fetchCyclePaymentStatus()
-  }, [selectedMember, selectedCycle, selectedChitFund, form])
+    fetchPaymentSummary()
+  }, [selectedMember, selectedChitFund, form])
 
   const onSubmit = async (data: CollectionFormValues) => {
     setIsLoading(true)
 
     try {
-      // CRITICAL SECURITY: Server-side validation to prevent overpayment and duplicates
-      const validation = await validatePaymentAttempt(
-        data.memberId, 
-        data.cycleId, 
+      // Get allocation breakdown to validate and create entries
+      const allocatedCycles = await getAllocatedCycles(
+        data.memberId,
+        data.chitFundId,
         data.amountCollected
       )
-      
-      if (!validation.isValid) {
+
+      if (!allocatedCycles || allocatedCycles.length === 0) {
         toast({
-          variant: "destructive", 
-          title: "Payment Validation Failed",
-          description: validation.errorMessage
+          variant: "destructive",
+          title: "Payment Allocation Failed",
+          description: "Unable to allocate payment. Please check the amount and try again."
         })
         setIsLoading(false)
         return
       }
 
       const supabase = createClient()
-      
+
+      // Create collection entries for each allocated cycle
+      const entries = allocatedCycles.map(allocation => ({
+        chit_fund_id: data.chitFundId,
+        cycle_id: allocation.cycleId,
+        member_id: data.memberId,
+        collector_id: data.collectorId,
+        amount_collected: allocation.allocatedAmount,
+        payment_method: data.paymentMethod,
+        collection_date: data.collectionDate,
+        notes: allocatedCycles.length > 1
+          ? `${data.notes || ''} [Auto-allocated: Cycle ${allocation.cycleNumber} - ${allocation.allocatedAmount}]`.trim()
+          : data.notes,
+        status: 'pending_close'
+      }))
+
       const { error } = await supabase
         .from('collection_entries')
-        .insert({
-          chit_fund_id: data.chitFundId,
-          cycle_id: data.cycleId,
-          member_id: data.memberId,
-          collector_id: data.collectorId,
-          amount_collected: data.amountCollected,
-          payment_method: data.paymentMethod,
-          collection_date: data.collectionDate,
-          notes: data.notes,
-          status: 'pending_close'
-        })
+        .insert(entries)
 
       if (error) {
-        console.error('Error creating collection entry:', error)
+        console.error('Error creating collection entries:', error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -199,35 +170,32 @@ export default function CollectPage() {
 
       toast({
         title: "Collection recorded successfully!",
-        description: "The payment has been recorded and is pending closure."
+        description: `Payment of ₹${data.amountCollected.toFixed(2)} allocated across ${allocatedCycles.length} cycle${allocatedCycles.length > 1 ? 's' : ''}.`
       })
 
       // Reset form completely for next entry
       form.reset({
         collectorId: '',
         chitFundId: '',
-        cycleId: '',
         memberId: '',
         amountCollected: undefined,
         paymentMethod: 'cash',
         collectionDate: new Date().toISOString().split('T')[0],
         notes: ''
       })
-      
+
       // Reset state variables
       setSelectedChitFund(null)
-      setSelectedCycle(null)
       setSelectedMember(null)
-      setPaymentLimits(null)
-      setCyclePaymentStatus(null)
-      setNextPayableCycle(null)
+      setPaymentSummary(null)
+      setAllocations([])
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Unexpected error:', error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "An unexpected error occurred. Please try again."
+        description: error.message || "An unexpected error occurred. Please try again."
       })
     } finally {
       setIsLoading(false)
@@ -289,40 +257,10 @@ export default function CollectPage() {
                                 field.onChange(value)
                                 setSelectedChitFund(value)
                                 // Reset dependent fields
-                                form.setValue('cycleId', '')
                                 form.setValue('memberId', '')
-                                setSelectedCycle(null)
                                 setSelectedMember(null)
-                                setPaymentLimits(null)
-                                setCyclePaymentStatus(null)
-                                setNextPayableCycle(null)
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* Cycle Selection */}
-                    <FormField
-                      control={form.control}
-                      name="cycleId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Cycle *</FormLabel>
-                          <FormControl>
-                            <CycleSelector
-                              chitFundId={selectedChitFund}
-                              memberId={selectedMember}
-                              value={field.value}
-                              onValueChange={(value) => {
-                                field.onChange(value)
-                                setSelectedCycle(value)
-                                // Clear payment status when cycle changes (will be refetched by useEffect)
-                                setCyclePaymentStatus(null)
-                                setNextPayableCycle(null)
-                                setPaymentLimits(null)
+                                setPaymentSummary(null)
+                                setAllocations([])
                               }}
                             />
                           </FormControl>
@@ -353,20 +291,34 @@ export default function CollectPage() {
                       )}
                     />
 
-                    {/* Payment Status Alert */}
-                    {cyclePaymentStatus?.isFullyPaid && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+                    {/* Payment Summary Alert */}
+                    {paymentSummary && paymentSummary.totalRemaining === 0 && (
+                      <div className="bg-green-50 border border-green-200 rounded-md p-4">
                         <div className="flex items-center">
-                          <AlertCircle className="h-5 w-5 text-amber-600 mr-2" />
+                          <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
                           <div>
-                            <h3 className="text-sm font-medium text-amber-800">
-                              Cycle Already Fully Paid
+                            <h3 className="text-sm font-medium text-green-800">
+                              All Cycles Fully Paid
                             </h3>
-                            <p className="text-sm text-amber-700 mt-1">
-                              This cycle has been fully paid (₹{cyclePaymentStatus.amountPaid.toFixed(2)} / ₹{cyclePaymentStatus.installmentAmount.toFixed(2)}).
-                              {nextPayableCycle && (
-                                <> Consider selecting <strong>Cycle {nextPayableCycle.cycleNumber}</strong> for the next payment.</>
-                              )}
+                            <p className="text-sm text-green-700 mt-1">
+                              This member has paid all {paymentSummary.totalCycles} cycles (₹{paymentSummary.totalPaid.toFixed(2)} / ₹{paymentSummary.totalObligation.toFixed(2)}).
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Advance Payment Info */}
+                    {paymentSummary && form.watch('amountCollected') > paymentSummary.installmentAmount && form.watch('amountCollected') <= paymentSummary.totalRemaining && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                        <div className="flex items-start gap-2">
+                          <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
+                          <div className="flex-1">
+                            <h3 className="text-sm font-medium text-blue-800">
+                              Advance Payment Detected
+                            </h3>
+                            <p className="text-xs text-blue-700 mt-1">
+                              This payment will be automatically allocated across {Math.ceil(form.watch('amountCollected') / paymentSummary.installmentAmount)} cycles. Check the preview on the right for details.
                             </p>
                           </div>
                         </div>
@@ -381,20 +333,20 @@ export default function CollectPage() {
                         render={({ field }) => {
                           const currentAmount = field.value || 0
                           const getInputColorClass = () => {
-                            if (!paymentLimits || currentAmount === 0) return ''
-                            if (currentAmount === paymentLimits.installmentAmount) return 'border-green-500 focus:border-green-500'
-                            if (currentAmount > paymentLimits.installmentAmount && currentAmount <= paymentLimits.maximum) return 'border-blue-500 focus:border-blue-500'
-                            if (currentAmount > paymentLimits.maximum) return 'border-red-500 focus:border-red-500'
+                            if (!paymentSummary || currentAmount === 0) return ''
+                            if (currentAmount > paymentSummary.totalRemaining) return 'border-red-500 focus:border-red-500'
+                            if (currentAmount === paymentSummary.installmentAmount) return 'border-green-500 focus:border-green-500'
+                            if (currentAmount > paymentSummary.installmentAmount) return 'border-blue-500 focus:border-blue-500'
                             return 'border-yellow-500 focus:border-yellow-500'
                           }
-                          
+
                           return (
                             <FormItem>
                               <FormLabel className="flex items-center justify-between">
                                 <span>Amount Collected *</span>
-                                {paymentLimits && !cyclePaymentStatus?.isFullyPaid && (
+                                {paymentSummary && paymentSummary.totalRemaining > 0 && (
                                   <span className="text-xs text-muted-foreground">
-                                    Max: ₹{paymentLimits.maximum.toFixed(2)} | Paid: ₹{cyclePaymentStatus?.amountPaid.toFixed(2) || '0.00'}
+                                    Remaining: ₹{paymentSummary.totalRemaining.toFixed(2)}
                                   </span>
                                 )}
                               </FormLabel>
@@ -402,9 +354,9 @@ export default function CollectPage() {
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  placeholder={cyclePaymentStatus?.isFullyPaid ? "Cycle fully paid" : paymentLimits ? paymentLimits.maximum.toFixed(2) : "0.00"}
+                                  placeholder={paymentSummary ? paymentSummary.installmentAmount.toFixed(2) : "0.00"}
                                   className={getInputColorClass()}
-                                  disabled={cyclePaymentStatus?.isFullyPaid}
+                                  disabled={paymentSummary?.totalRemaining === 0}
                                   {...field}
                                   onFocus={(e) => {
                                     // Auto-select all content when focused for better UX
@@ -416,24 +368,40 @@ export default function CollectPage() {
                                     field.onChange(value)
 
                                     // Trigger validation through the resolver
-                                    if (paymentLimits && value && value > 0) {
+                                    if (paymentSummary && value && value > 0) {
                                       form.trigger('amountCollected')
                                     }
                                   }}
                                 />
                               </FormControl>
-                              {paymentLimits && currentAmount > 0 && (
-                                <div className="text-xs mt-1">
-                                  {(() => {
-                                    const message = getPaymentMessage(currentAmount, paymentLimits)
-                                    const colorClass = {
-                                      success: 'text-green-600',
-                                      info: 'text-blue-600',
-                                      warning: 'text-yellow-600',
-                                      error: 'text-red-600'
-                                    }[message.type]
-                                    return <span className={colorClass}>{message.message}</span>
-                                  })()}
+                              {paymentSummary && currentAmount > 0 && (
+                                <div className="text-xs mt-1.5">
+                                  {currentAmount > paymentSummary.totalRemaining ? (
+                                    <div className="flex items-center gap-1 text-red-600">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span className="font-medium">
+                                        Exceeds by ₹{(currentAmount - paymentSummary.totalRemaining).toFixed(2)}
+                                      </span>
+                                    </div>
+                                  ) : currentAmount === paymentSummary.installmentAmount ? (
+                                    <div className="flex items-center gap-1 text-green-600">
+                                      <CheckCircle className="h-3 w-3" />
+                                      <span className="font-medium">Normal installment</span>
+                                    </div>
+                                  ) : currentAmount > paymentSummary.installmentAmount ? (
+                                    <div className="flex items-center gap-1 text-blue-600">
+                                      <TrendingUp className="h-3 w-3" />
+                                      <span className="font-medium">
+                                        Advance - covers {Math.floor(currentAmount / paymentSummary.installmentAmount)} cycles
+                                        {currentAmount % paymentSummary.installmentAmount > 0 && ' + partial'}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 text-yellow-600">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span className="font-medium">Partial payment</span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               <FormMessage />
@@ -502,13 +470,13 @@ export default function CollectPage() {
                     <div className="flex justify-end space-x-4">
                       <Button
                         type="submit"
-                        disabled={isLoading || cyclePaymentStatus?.isFullyPaid}
+                        disabled={isLoading || paymentSummary?.totalRemaining === 0}
                         className="min-w-32"
                       >
                         {isLoading ? (
                           'Recording...'
-                        ) : cyclePaymentStatus?.isFullyPaid ? (
-                          'Cycle Fully Paid'
+                        ) : paymentSummary?.totalRemaining === 0 ? (
+                          'All Cycles Paid'
                         ) : (
                           <>
                             <Save className="h-4 w-4 mr-2" />
@@ -523,9 +491,9 @@ export default function CollectPage() {
             </Card>
           </div>
 
-          {/* Payment Preview Panel */}
+          {/* Cycle Allocation Preview Panel */}
           <div className="lg:col-span-1">
-            <PaymentPreview
+            <CycleAllocationPreview
               memberId={selectedMember}
               chitFundId={selectedChitFund}
               paymentAmount={form.watch('amountCollected') || 0}

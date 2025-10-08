@@ -37,6 +37,30 @@ export interface NextPayableCycle {
   remainingAmount: number
 }
 
+export interface CycleAllocation {
+  cycleId: string
+  cycleNumber: number
+  cycleDate: string
+  installmentAmount: number
+  alreadyPaid: number
+  remainingAmount: number
+  allocatedAmount: number
+  paymentStatus: 'unpaid' | 'partially_paid' | 'fully_paid'
+}
+
+export interface MemberPaymentSummary {
+  totalObligation: number
+  totalPaid: number
+  totalRemaining: number
+  installmentAmount: number
+  totalCycles: number
+  cyclesFullyPaid: number
+  cyclesPartiallyPaid: number
+  cyclesUnpaid: number
+  nextUnpaidCycleNumber: number | null
+  nextUnpaidCycleId: string | null
+}
+
 export interface PaymentBreakdown {
   currentCycle: number
   advanceAmount: number
@@ -350,6 +374,100 @@ export async function getNextPayableCycle(
     }
   } catch (error) {
     console.error('Error getting next payable cycle:', error)
+    return null
+  }
+}
+
+/**
+ * Get allocated cycles for a payment amount
+ * Returns breakdown of how payment will be distributed across cycles
+ */
+export async function getAllocatedCycles(
+  memberId: string,
+  chitFundId: string,
+  paymentAmount: number
+): Promise<CycleAllocation[]> {
+  const supabase = createClient()
+
+  try {
+    const { data, error } = await supabase.rpc('allocate_payment_to_cycles', {
+      p_member_id: memberId,
+      p_chit_fund_id: chitFundId,
+      p_payment_amount: paymentAmount
+    })
+
+    if (error) {
+      console.error('Error allocating payment to cycles:', error)
+      throw new Error(error.message)
+    }
+
+    if (!data || data.length === 0) {
+      return []
+    }
+
+    return data.map((row: any) => ({
+      cycleId: row.cycle_id,
+      cycleNumber: row.cycle_number,
+      cycleDate: row.cycle_date,
+      installmentAmount: parseFloat(row.installment_amount),
+      alreadyPaid: parseFloat(row.already_paid),
+      remainingAmount: parseFloat(row.remaining_amount),
+      allocatedAmount: parseFloat(row.allocated_amount),
+      paymentStatus: row.payment_status
+    }))
+  } catch (error) {
+    console.error('Error allocating payment to cycles:', error)
+    throw error
+  }
+}
+
+/**
+ * Get member payment summary for a chit fund
+ * Returns total obligation, paid, remaining, and cycle status
+ */
+export async function getMemberPaymentSummary(
+  memberId: string,
+  chitFundId: string
+): Promise<MemberPaymentSummary | null> {
+  const supabase = createClient()
+
+  try {
+    const { data, error } = await supabase.rpc('get_member_payment_summary', {
+      p_member_id: memberId,
+      p_chit_fund_id: chitFundId
+    })
+
+    if (error) {
+      console.error('Error getting member payment summary:', {
+        error,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      return null
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('No data returned from get_member_payment_summary', { memberId, chitFundId })
+      return null
+    }
+
+    const row = data[0]
+    return {
+      totalObligation: parseFloat(row.total_obligation),
+      totalPaid: parseFloat(row.total_paid),
+      totalRemaining: parseFloat(row.total_remaining),
+      installmentAmount: parseFloat(row.installment_amount),
+      totalCycles: row.total_cycles,
+      cyclesFullyPaid: row.cycles_fully_paid,
+      cyclesPartiallyPaid: row.cycles_partially_paid,
+      cyclesUnpaid: row.cycles_unpaid,
+      nextUnpaidCycleNumber: row.next_unpaid_cycle_number,
+      nextUnpaidCycleId: row.next_unpaid_cycle_id
+    }
+  } catch (error) {
+    console.error('Unexpected error in getMemberPaymentSummary:', error)
     return null
   }
 }
