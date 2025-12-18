@@ -25,7 +25,9 @@ export default async function MembersPage() {
     .select(`
       *,
       chit_fund_members(
+        id,
         chit_fund_id,
+        number_of_shares,
         assigned_collector_id,
         chit_funds(id, name),
         assigned_collector:profiles(id, full_name)

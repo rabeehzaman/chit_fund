@@ -70,7 +70,7 @@ export function CreateChitFundDialog({ children }: CreateChitFundDialogProps) {
       total_cycles: 12,
       cycle_interval_type: "monthly",
       cycle_interval_value: 1,
-      start_date: "",
+      start_date: new Date().toISOString().split('T')[0], // Default to today's date
       description: "",
     },
   })

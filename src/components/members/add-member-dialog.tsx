@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
-import { User, Phone, MapPin, CreditCard, UserCheck } from "lucide-react"
+import { User, Phone, MapPin, CreditCard, UserCheck, Hash } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 
 const addMemberSchema = z.object({
@@ -22,8 +22,15 @@ const addMemberSchema = z.object({
   phone: z.string().optional().or(z.literal("")),
   address: z.string().optional().or(z.literal("")),
   chit_fund_id: z.string().optional().or(z.literal("")),
-  assigned_collector_id: z.string().optional(),
+  assigned_collector_id: z.string().optional().or(z.literal("")),
   auto_assign: z.boolean(),
+  number_of_shares: z.number()
+    .min(0.5, "Must have at least 0.5 shares")
+    .max(1000, "Maximum 1000 shares allowed")
+    .refine(
+      (val) => (val * 4) % 1 === 0,
+      { message: "Shares must be in 0.25 increments (e.g., 0.5, 0.75, 1.0, 1.25, 1.5)" }
+    ),
 })
 
 type AddMemberForm = z.infer<typeof addMemberSchema>
@@ -57,6 +64,7 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
       chit_fund_id: "",
       assigned_collector_id: "",
       auto_assign: false,
+      number_of_shares: 1,
     },
   })
 
@@ -147,6 +155,7 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
             member_id: member.id,
             assigned_collector_id: data.assigned_collector_id && data.assigned_collector_id !== 'none' ? data.assigned_collector_id : null,
             status: 'active',
+            number_of_shares: data.number_of_shares || 1,
           })
 
         if (assignmentError) {
@@ -365,9 +374,48 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
                   />
 
                   {watchedChitFund && (
-                    <FormField
-                      control={form.control}
-                      name="assigned_collector_id"
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="number_of_shares"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                              <Hash className="h-4 w-4" />
+                              Number of Shares/Chits *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="0.5"
+                                max="1000"
+                                step="0.25"
+                                placeholder="1.0"
+                                disabled={isLoading}
+                                {...field}
+                                onChange={(e) => {
+                                  const value = parseFloat(e.target.value)
+                                  field.onChange(isNaN(value) ? 0.5 : value)
+                                }}
+                              />
+                            </FormControl>
+                            <p className="text-sm text-muted-foreground">
+                              {field.value !== 1 ? (
+                                <>
+                                  Payment per cycle will be <strong>{field.value}x</strong> the standard installment
+                                </>
+                              ) : (
+                                'Each share represents one installment payment per cycle'
+                              )}
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="assigned_collector_id"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="flex items-center gap-2">
@@ -405,7 +453,8 @@ export function AddMemberDialog({ children, chitFunds, collectors }: AddMemberDi
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
+                      />
+                    </>
                   )}
                 </div>
               )}

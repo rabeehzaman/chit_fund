@@ -50,10 +50,11 @@ export default async function ChitFundCyclesPage({ params }: PageProps) {
     .order('cycle_number', { ascending: true })
 
   // Fetch chit fund members
-  const { data: members } = await supabase
+  const { data: membersData } = await supabase
     .from('chit_fund_members')
     .select(`
-      *,
+      id,
+      number_of_shares,
       member:members(
         id,
         full_name,
@@ -63,14 +64,21 @@ export default async function ChitFundCyclesPage({ params }: PageProps) {
     .eq('chit_fund_id', id)
     .eq('status', 'active')
 
+  // Transform members to ensure correct structure
+  const members = membersData?.map(m => ({
+    ...m,
+    member: Array.isArray(m.member) ? m.member[0] : m.member
+  }))
+
   // Calculate cycle statistics
   const totalCycles = cycles?.length || 0
   const completedCycles = cycles?.filter(c => c.status === 'completed').length || 0
   const activeCycles = cycles?.filter(c => c.status === 'active').length || 0
   const upcomingCycles = cycles?.filter(c => c.status === 'upcoming').length || 0
   
-  // Calculate overall collection progress
-  const totalExpected = totalCycles * parseFloat(chitFund.installment_per_member) * (members?.length || 0)
+  // Calculate overall collection progress (share-adjusted)
+  const totalShares = members?.reduce((sum, m) => sum + (m.number_of_shares || 1), 0) || 0
+  const totalExpected = totalCycles * parseFloat(chitFund.installment_per_member) * totalShares
   const totalCollected = cycles?.reduce((sum, cycle) => {
     return sum + (cycle.collection_entries || []).reduce((cycleSum: number, entry: any) => {
       return entry.status === 'closed' ? cycleSum + parseFloat(entry.amount_collected) : cycleSum

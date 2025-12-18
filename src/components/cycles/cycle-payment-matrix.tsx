@@ -10,6 +10,8 @@ import { formatCurrency, cn } from '@/lib/utils'
 import { Check, X, Clock, AlertTriangle, TrendingUp, Trophy } from 'lucide-react'
 
 interface Member {
+  id: string
+  number_of_shares: number
   member: {
     id: string
     full_name: string
@@ -60,7 +62,14 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
   const [matrixData, setMatrixData] = useState<Record<string, Record<string, CellData>>>({})
   const [selectedCell, setSelectedCell] = useState<{ memberId: string; cycleId: string } | null>(null)
 
-  const installmentAmount = parseFloat(chitFund.installment_per_member)
+  const baseInstallmentAmount = parseFloat(chitFund.installment_per_member)
+
+  // Helper to get share-adjusted installment for a member
+  const getMemberInstallment = (memberId: string) => {
+    const member = members.find(m => m.member.id === memberId)
+    const shares = member?.number_of_shares || 1
+    return baseInstallmentAmount * shares
+  }
 
   useEffect(() => {
     // Build the payment matrix data
@@ -68,28 +77,29 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
 
     members.forEach(member => {
       matrix[member.member.id] = {}
-      
+      const memberInstallment = getMemberInstallment(member.member.id)
+
       cycles.forEach(cycle => {
         const memberClosedEntries = (cycle.collection_entries || []).filter(
           entry => entry.member_id === member.member.id && entry.status === 'closed'
         )
         const amountPaid = memberClosedEntries.reduce((sum, entry) => sum + parseFloat(entry.amount_collected), 0)
         const isWinner = cycle.winner_member_id === member.member.id
-        
+
         let status: CellData['status'] = 'unpaid'
-        
+
         if (cycle.status === 'upcoming') {
           status = 'upcoming'
         } else if (amountPaid === 0) {
           status = 'unpaid'
-        } else if (amountPaid < installmentAmount) {
+        } else if (amountPaid < memberInstallment) {
           status = 'partial'
-        } else if (amountPaid > installmentAmount) {
+        } else if (amountPaid > memberInstallment) {
           status = 'advance'
         } else {
           status = 'paid'
         }
-        
+
         matrix[member.member.id][cycle.id] = {
           status,
           amount: amountPaid,
@@ -99,7 +109,7 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
     })
 
     setMatrixData(matrix)
-  }, [cycles, members, installmentAmount])
+  }, [cycles, members, baseInstallmentAmount])
 
   const getCellColor = (cellData: CellData) => {
     if (cellData.isWinner) {
@@ -145,6 +155,7 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
 
   const getMemberStats = (memberId: string) => {
     const memberData = matrixData[memberId] || {}
+    const memberInstallment = getMemberInstallment(memberId)
     const stats = {
       paid: 0,
       partial: 0,
@@ -153,12 +164,12 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
       totalPaid: 0,
       totalExpected: 0
     }
-    
+
     Object.values(memberData).forEach(cell => {
       if (cell.status !== 'upcoming') {
-        stats.totalExpected += installmentAmount
+        stats.totalExpected += memberInstallment
         stats.totalPaid += cell.amount
-        
+
         switch (cell.status) {
           case 'paid':
             stats.paid += 1
@@ -175,24 +186,29 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
         }
       }
     })
-    
+
     return stats
   }
 
   const getCycleStats = (cycleId: string) => {
+    // Calculate share-adjusted total expected for this cycle
+    const totalExpectedForCycle = members.reduce((sum, member) => {
+      return sum + getMemberInstallment(member.member.id)
+    }, 0)
+
     const stats = {
       paid: 0,
       partial: 0,
       unpaid: 0,
       totalCollected: 0,
-      totalExpected: installmentAmount * members.length
+      totalExpected: totalExpectedForCycle
     }
-    
+
     members.forEach(member => {
       const cellData = matrixData[member.member.id]?.[cycleId]
       if (cellData && cellData.status !== 'upcoming') {
         stats.totalCollected += cellData.amount
-        
+
         switch (cellData.status) {
           case 'paid':
           case 'advance':
@@ -207,7 +223,7 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
         }
       }
     })
-    
+
     return stats
   }
 
@@ -319,12 +335,24 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
                         <tr key={member.member.id} className="border-b hover:bg-gray-50">
                           <td className="sticky left-0 z-10 bg-white p-4 border-r">
                             <div className="space-y-1">
-                              <div className="font-medium text-sm">
-                                {member.member.full_name}
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm">
+                                  {member.member.full_name}
+                                </span>
+                                {member.number_of_shares !== 1 && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {member.number_of_shares}x
+                                  </Badge>
+                                )}
                               </div>
                               {member.member.phone && (
                                 <div className="text-xs text-muted-foreground">
                                   {member.member.phone}
+                                </div>
+                              )}
+                              {member.number_of_shares !== 1 && (
+                                <div className="text-xs text-muted-foreground">
+                                  {formatCurrency(getMemberInstallment(member.member.id))} per cycle
                                 </div>
                               )}
                             </div>
@@ -365,7 +393,7 @@ export function CyclePaymentMatrix({ chitFund, cycles, members }: CyclePaymentMa
                                       </div>
                                       <div>Status: {cellData.status}</div>
                                       <div>Amount: {formatCurrency(cellData.amount)}</div>
-                                      <div>Expected: {formatCurrency(installmentAmount)}</div>
+                                      <div>Expected: {formatCurrency(getMemberInstallment(member.member.id))}</div>
                                       {cellData.isWinner && (
                                         <div className="text-yellow-600 font-medium">
                                           🏆 Cycle Winner

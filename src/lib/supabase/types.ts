@@ -179,6 +179,7 @@ export type Database = {
           id: string
           joined_at: string
           member_id: string
+          number_of_shares: number
           status: string | null
           updated_at: string | null
         }
@@ -189,6 +190,7 @@ export type Database = {
           id?: string
           joined_at?: string
           member_id: string
+          number_of_shares?: number
           status?: string | null
           updated_at?: string | null
         }
@@ -199,6 +201,7 @@ export type Database = {
           id?: string
           joined_at?: string
           member_id?: string
+          number_of_shares?: number
           status?: string | null
           updated_at?: string | null
         }
@@ -1124,12 +1127,14 @@ export type Database = {
           member_since: string | null
           membership_status: string | null
           next_due_amount: number | null
+          number_of_shares: number | null
           payment_completion_percentage: number | null
           payment_status: string | null
           pending_payments: number | null
           phone: string | null
           preferred_payment_method: string | null
           remaining_amount: number | null
+          share_adjusted_installment: number | null
           total_due_amount: number | null
           total_paid: number | null
         }
@@ -1204,6 +1209,7 @@ export type Database = {
           total_collected: number | null
           total_cycles: number | null
           total_payouts: number | null
+          total_shares: number | null
           total_value: number | null
           updated_at: string | null
         }
@@ -1339,6 +1345,23 @@ export type Database = {
       }
     }
     Functions: {
+      allocate_payment_to_cycles: {
+        Args: {
+          p_chit_fund_id: string
+          p_member_id: string
+          p_payment_amount: number
+        }
+        Returns: {
+          allocated_amount: number
+          already_paid: number
+          cycle_date: string
+          cycle_id: string
+          cycle_number: number
+          installment_amount: number
+          payment_status: string
+          remaining_amount: number
+        }[]
+      }
       apply_advance_to_cycle: {
         Args: {
           p_amount_to_apply: number
@@ -1361,6 +1384,10 @@ export type Database = {
           next_cycle_number: number
           remaining_advance: number
         }[]
+      }
+      auto_generate_cycles_for_chit_fund: {
+        Args: { chit_fund_id_param: string }
+        Returns: undefined
       }
       calculate_cycle_payout_amount: {
         Args: { p_commission_percentage?: number; p_cycle_id: string }
@@ -1448,13 +1475,12 @@ export type Database = {
         }[]
       }
       get_arrears_statistics: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
-          average_arrears: number
-          minor_cases: number
-          moderate_cases: number
-          severe_cases: number
-          total_arrears_amount: number
+          minor_arrears_count: number
+          moderate_arrears_count: number
+          severe_arrears_count: number
+          total_arrears: number
           total_members_with_arrears: number
         }[]
       }
@@ -1531,6 +1557,21 @@ export type Database = {
           status: string
         }[]
       }
+      get_member_payment_summary: {
+        Args: { p_chit_fund_id: string; p_member_id: string }
+        Returns: {
+          cycles_fully_paid: number
+          cycles_partially_paid: number
+          cycles_unpaid: number
+          installment_amount: number
+          next_unpaid_cycle_id: string
+          next_unpaid_cycle_number: number
+          total_cycles: number
+          total_obligation: number
+          total_paid: number
+          total_remaining: number
+        }[]
+      }
       get_members_with_advances: {
         Args: { p_chit_fund_id?: string }
         Returns: {
@@ -1541,7 +1582,9 @@ export type Database = {
           installment_per_member: number
           member_id: string
           member_name: string
+          number_of_shares: number
           phone: string
+          share_adjusted_installment: number
         }[]
       }
       get_members_with_arrears: {
@@ -1556,8 +1599,10 @@ export type Database = {
           last_payment_date: string
           member_id: string
           member_name: string
+          number_of_shares: number
           overdue_cycles: number
           phone: string
+          share_adjusted_installment: number
         }[]
       }
       get_next_payable_cycle: {
