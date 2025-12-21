@@ -9,9 +9,20 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Filter, Search, Users, DollarSign, Calendar, FileText } from 'lucide-react'
+import { ArrowLeft, Filter, Search, Users, DollarSign, Calendar, FileText, Trash2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import Link from 'next/link'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useToast } from '@/hooks/use-toast'
 
 type PendingCollection = Tables<'collection_entries'> & {
   chit_funds: {
@@ -49,6 +60,10 @@ export default function PendingCollectionsPage() {
   const [collectorFilter, setCollectorFilter] = useState<string>('all')
   const [chitFundFilter, setChitFundFilter] = useState<string>('all')
   const [dateFromFilter, setDateFromFilter] = useState('')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [collectionToDelete, setCollectionToDelete] = useState<PendingCollection | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchPendingCollections()
@@ -167,6 +182,54 @@ export default function PendingCollectionsPage() {
     })
   }
 
+  const handleDeleteClick = (entry: PendingCollection) => {
+    setCollectionToDelete(entry)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!collectionToDelete) return
+
+    setIsDeleting(true)
+    try {
+      const supabase = createClient()
+
+      const { error } = await supabase
+        .from('collection_entries')
+        .delete()
+        .eq('id', collectionToDelete.id)
+
+      if (error) {
+        console.error('Error deleting collection:', error)
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to delete collection entry. Please try again.',
+        })
+        return
+      }
+
+      // Update local state by removing the deleted collection
+      setCollections(prev => prev.filter(c => c.id !== collectionToDelete.id))
+
+      toast({
+        title: 'Success',
+        description: 'Collection entry deleted successfully.',
+      })
+
+      setDeleteDialogOpen(false)
+      setCollectionToDelete(null)
+    } catch (error) {
+      console.error('Unexpected error deleting collection:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'An unexpected error occurred. Please try again.',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const getUniqueCollectors = () => {
     const collectors = new Map()
@@ -382,6 +445,7 @@ export default function PendingCollectionsPage() {
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Payment</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -429,6 +493,16 @@ export default function PendingCollectionsPage() {
                         <TableCell className="max-w-xs truncate">
                           {entry.notes || '-'}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteClick(entry)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -438,6 +512,48 @@ export default function PendingCollectionsPage() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Collection Entry</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this collection entry? This action cannot be undone.
+              {collectionToDelete && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-md space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Member:</span>
+                    <span>{collectionToDelete.members?.full_name}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Amount:</span>
+                    <span className="font-semibold">{formatCurrency(collectionToDelete.amount_collected)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Date:</span>
+                    <span>{formatDate(collectionToDelete.collection_date)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Chit Fund:</span>
+                    <span>{collectionToDelete.chit_funds?.name}</span>
+                  </div>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
