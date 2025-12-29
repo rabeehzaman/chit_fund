@@ -27,7 +27,7 @@ import {
   Calendar,
   Zap
 } from 'lucide-react'
-import { SYSTEM_PROFILE_ID } from '@/lib/system'
+import { User as UserType } from '@supabase/supabase-js'
 
 type ClosingSession = Tables<'closing_sessions'> & {
   profiles: {
@@ -74,8 +74,15 @@ export default function ApprovalsPage() {
   const [approvalComment, setApprovalComment] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [currentAction, setCurrentAction] = useState<'approve' | 'reject' | null>(null)
+  const [currentUser, setCurrentUser] = useState<UserType | null>(null)
 
   useEffect(() => {
+    const fetchUser = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      setCurrentUser(user)
+    }
+    fetchUser()
     fetchPendingApprovals()
   }, [])
 
@@ -189,15 +196,15 @@ export default function ApprovalsPage() {
   }
 
   const handleApprovalAction = async () => {
-    if (!selectedSession || !currentAction) return
+    if (!selectedSession || !currentAction || !currentUser) return
 
     setActionLoading(true)
     try {
       const supabase = createClient()
-      
+
       const updateData: any = {
         status: currentAction === 'approve' ? 'approved' : 'rejected',
-        approved_by: SYSTEM_PROFILE_ID,
+        approved_by: currentUser.id,
         approved_at: new Date().toISOString()
       }
 
@@ -266,7 +273,16 @@ export default function ApprovalsPage() {
   }
 
   const handleBulkApprove = async () => {
-    const perfectMatches = filteredSessions.filter(session => 
+    if (!currentUser) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "User session not found. Please refresh the page."
+      })
+      return
+    }
+
+    const perfectMatches = filteredSessions.filter(session =>
       session.declared_total === session.system_total
     )
 
@@ -282,13 +298,13 @@ export default function ApprovalsPage() {
     setActionLoading(true)
     try {
       const supabase = createClient()
-      
+
       // Bulk update closing sessions
       const { error } = await supabase
         .from('closing_sessions')
         .update({
           status: 'approved',
-          approved_by: SYSTEM_PROFILE_ID,
+          approved_by: currentUser.id,
           approved_at: new Date().toISOString()
         })
         .in('id', perfectMatches.map(s => s.id))
