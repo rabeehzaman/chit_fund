@@ -27,8 +27,6 @@ import {
   Calendar,
   Zap
 } from 'lucide-react'
-import { SYSTEM_PROFILE_ID } from '@/lib/system'
-
 type ClosingSession = Tables<'closing_sessions'> & {
   profiles: {
     full_name: string | null
@@ -57,6 +55,12 @@ interface ApprovalStats {
   total_pending_amount: number
 }
 
+interface CurrentUser {
+  id: string
+  full_name: string | null
+  role: string
+}
+
 export default function ApprovalsPage() {
   const [closingSessions, setClosingSessions] = useState<ClosingSession[]>([])
   const [filteredSessions, setFilteredSessions] = useState<ClosingSession[]>([])
@@ -74,14 +78,35 @@ export default function ApprovalsPage() {
   const [approvalComment, setApprovalComment] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [currentAction, setCurrentAction] = useState<'approve' | 'reject' | null>(null)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
 
   useEffect(() => {
+    fetchCurrentUser()
     fetchPendingApprovals()
   }, [])
 
   useEffect(() => {
     filterSessions()
   }, [closingSessions, searchTerm, varianceFilter])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .eq('id', user.id)
+          .single()
+
+        setCurrentUser(profile)
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+    }
+  }
 
   const fetchPendingApprovals = async () => {
     setLoading(true)
@@ -191,13 +216,22 @@ export default function ApprovalsPage() {
   const handleApprovalAction = async () => {
     if (!selectedSession || !currentAction) return
 
+    if (!currentUser) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "User information not loaded. Please refresh the page."
+      })
+      return
+    }
+
     setActionLoading(true)
     try {
       const supabase = createClient()
-      
+
       const updateData: any = {
         status: currentAction === 'approve' ? 'approved' : 'rejected',
-        approved_by: SYSTEM_PROFILE_ID,
+        approved_by: currentUser.id,
         approved_at: new Date().toISOString()
       }
 
@@ -266,7 +300,7 @@ export default function ApprovalsPage() {
   }
 
   const handleBulkApprove = async () => {
-    const perfectMatches = filteredSessions.filter(session => 
+    const perfectMatches = filteredSessions.filter(session =>
       session.declared_total === session.system_total
     )
 
@@ -279,16 +313,25 @@ export default function ApprovalsPage() {
       return
     }
 
+    if (!currentUser) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "User information not loaded. Please refresh the page."
+      })
+      return
+    }
+
     setActionLoading(true)
     try {
       const supabase = createClient()
-      
+
       // Bulk update closing sessions
       const { error } = await supabase
         .from('closing_sessions')
         .update({
           status: 'approved',
-          approved_by: SYSTEM_PROFILE_ID,
+          approved_by: currentUser.id,
           approved_at: new Date().toISOString()
         })
         .in('id', perfectMatches.map(s => s.id))
