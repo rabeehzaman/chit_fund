@@ -18,8 +18,18 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/hooks/use-toast'
 import { formatCurrency } from '@/lib/utils'
-import { Save, Send, AlertTriangle, CheckCircle, DollarSign, Calendar, User } from 'lucide-react'
+import { Save, Send, AlertTriangle, CheckCircle, DollarSign, Calendar, User, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 type CollectionEntry = Tables<'collection_entries'> & {
   chit_funds: {
@@ -52,6 +62,10 @@ export default function CreateClosingSessionPage() {
   const [pendingCollections, setPendingCollections] = useState<CollectionEntry[]>([])
   const [selectedCollections, setSelectedCollections] = useState<string[]>([])
   const [selectedCollector, setSelectedCollector] = useState<string>('')
+  const [collectionToDelete, setCollectionToDelete] = useState<CollectionEntry | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  const supabase = createClient()
 
   const form = useForm<ClosingSessionFormValues>({
     resolver: zodResolver(closingSessionSchema),
@@ -143,6 +157,36 @@ export default function CreateClosingSessionPage() {
     } else {
       setSelectedCollections([])
     }
+  }
+
+  const handleDeleteClick = (collection: CollectionEntry) => {
+    setCollectionToDelete(collection)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!collectionToDelete) return
+
+    const { error } = await supabase
+      .from('collection_entries')
+      .delete()
+      .eq('id', collectionToDelete.id)
+
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to delete collection'
+      })
+      return
+    }
+
+    setPendingCollections(prev => prev.filter(c => c.id !== collectionToDelete.id))
+    setSelectedCollections(prev => prev.filter(id => id !== collectionToDelete.id))
+
+    toast({ title: 'Deleted', description: 'Collection entry deleted' })
+    setDeleteDialogOpen(false)
+    setCollectionToDelete(null)
   }
 
   const onSubmit = async (data: ClosingSessionFormValues, isDraft: boolean = true) => {
@@ -436,6 +480,7 @@ export default function CreateClosingSessionPage() {
                           <TableHead>Cycle</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Method</TableHead>
+                          <TableHead className="w-[60px]">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -458,6 +503,16 @@ export default function CreateClosingSessionPage() {
                               <Badge variant={collection.payment_method === 'cash' ? 'default' : 'secondary'}>
                                 {collection.payment_method}
                               </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteClick(collection)}
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -588,6 +643,27 @@ export default function CreateClosingSessionPage() {
           </div>
         </form>
       </Form>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Collection Entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the collection of {formatCurrency(collectionToDelete?.amount_collected || 0)} from {collectionToDelete?.members?.full_name}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
